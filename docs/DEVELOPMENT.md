@@ -37,3 +37,7 @@ Para editar/executar manualmente no navegador, use GitHub Codespaces quando disp
 `Code → Codespaces → Create codespace on main`
 
 O CI continua sendo a validação automática oficial do repositório.
+
+## Deploy Cloudflare
+
+O Worker `central-sms-mvp` usa integração Git com a branch `main`. Depois de alterar permissões do GitHub App da Cloudflare, um novo commit em `main` deve disparar automaticamente um novo build/deploy no Workers Builds.
