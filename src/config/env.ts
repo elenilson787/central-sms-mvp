@@ -6,6 +6,9 @@ function optional(name: string): string | undefined {
 export const env = {
   appBaseUrl: optional("APP_BASE_URL"),
   purchasesEnabled: optional("PURCHASES_ENABLED") === "true",
+  pixEnabled: optional("PIX_ENABLED") === "true",
+  pixMinDepositCents: Number(optional("PIX_MIN_DEPOSIT_CENTS") ?? "500"),
+  pixMaxDepositCents: Number(optional("PIX_MAX_DEPOSIT_CENTS") ?? "100000"),
   adminApiToken: optional("ADMIN_API_TOKEN"),
   cronSecret: optional("CRON_SECRET"),
   telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
