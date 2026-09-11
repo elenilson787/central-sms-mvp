@@ -2,21 +2,22 @@
 
 Plataforma modular via Telegram para catálogo, carteira, pagamentos e integrações com provedores de números/SMS, construída com Next.js, TypeScript e Supabase/PostgreSQL.
 
-> Estado atual: **bootstrap seguro**. A estrutura e os contratos estão no repositório, mas compras reais de números e cobranças PIX permanecem desativadas até configuração e revisão das integrações externas.
+> Estado atual: **bootstrap seguro + Telegram Mini App**. A estrutura, autenticação da Mini App, carteira e banco estão preparados; compras reais de números e cobranças PIX permanecem desativadas até configuração e revisão das integrações externas.
 
 ## Stack
 
 - Next.js App Router
 - TypeScript
 - Supabase/PostgreSQL
-- Telegram Bot API
+- Telegram Bot API + Telegram Mini App
 - GitHub Actions
-- Vercel como opção de deploy
+- Cloudflare Workers como alvo de deploy
 
 ## Estrutura
 
 ```text
 app/                 rotas e interface Next.js
+app/miniapp/         interface principal dentro do Telegram
 src/                 serviços de domínio e integrações
 supabase/schema.sql  schema inicial do banco
 tests/               smoke tests
@@ -27,6 +28,7 @@ docs/                arquitetura, pesquisa e desenvolvimento
 ## Capacidades modeladas
 
 - usuários Telegram;
+- Mini App autenticada por `Telegram.WebApp.initData` validado no servidor;
 - carteira em BRL com ledger;
 - transações `deposit`, `purchase`, `refund` e `adjustment`;
 - catálogo com allowlist por `service_policies`;
@@ -37,13 +39,32 @@ docs/                arquitetura, pesquisa e desenvolvimento
 - audit logs;
 - abstração genérica de providers.
 
+## Telegram Mini App
+
+A rota principal da interface é:
+
+```text
+/miniapp
+```
+
+O `/start` do bot envia um botão `web_app` para abrir essa interface dentro do Telegram. O backend valida a assinatura do `initData`, cria/atualiza o usuário no Supabase, garante sua carteira e retorna as ativações recentes.
+
+O endpoint administrativo abaixo configura webhook, menu button e comandos quando o deploy estiver pronto:
+
+```text
+POST /api/admin/telegram/configure
+```
+
+Veja [`docs/TELEGRAM_MINIAPP.md`](docs/TELEGRAM_MINIAPP.md).
+
 ## Travas atuais
 
 - `PURCHASES_ENABLED=false` por padrão;
 - adapter externo de provider está em modo bootstrap e não executa compras;
 - integração PIX está em modo bootstrap e não cria cobranças reais;
 - categorias de maior risco são bloqueadas pela camada de compliance;
-- nenhum segredo deve ser versionado.
+- nenhum segredo deve ser versionado;
+- `initDataUnsafe` não é usado para autenticação da Mini App.
 
 Isso permite desenvolver banco, bot, painel e regras de negócio sem movimentar dinheiro nem consumir números reais por acidente.
 
@@ -99,6 +120,7 @@ Nunca envie ao GitHub:
 .env
 .env.local
 TELEGRAM_BOT_TOKEN
+TELEGRAM_WEBHOOK_SECRET
 SUPABASE_SECRET_KEY
 MERCADO_PAGO_ACCESS_TOKEN
 FIVESIM_TOKEN
@@ -108,17 +130,19 @@ Use secrets/environment variables do ambiente de deploy.
 
 ## Próximas etapas
 
-1. Fazer o bootstrap do projeto Supabase dedicado.
-2. Validar schema e advisors do Supabase.
-3. Implementar o bot Telegram em feature branch.
-4. Configurar catálogo somente leitura.
-5. Revisar documentação/termos comerciais do provider escolhido.
-6. Implementar integração externa em branch própria, mantendo compras desligadas até aprovação.
-7. Implementar PIX e webhook em branch própria.
-8. Adicionar painel administrativo.
+1. Validar o Telegram Mini App no CI e integrar ao `main`.
+2. Preparar deploy Cloudflare Workers com `vinext` em branch própria.
+3. Configurar `APP_BASE_URL`, Supabase e segredos do bot no ambiente de deploy.
+4. Criar/configurar o bot e executar `/api/admin/telegram/configure`.
+5. Testar `/start` → Mini App → sessão Supabase de ponta a ponta.
+6. Configurar catálogo somente leitura.
+7. Revisar documentação/termos comerciais do provider escolhido.
+8. Implementar integrações externas em branches próprias, mantendo compras desligadas até aprovação.
+9. Implementar PIX e webhook em branch própria.
 
 Veja também:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/RESEARCH.md`](docs/RESEARCH.md)
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- [`docs/TELEGRAM_MINIAPP.md`](docs/TELEGRAM_MINIAPP.md)
