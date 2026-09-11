@@ -22,6 +22,15 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, session });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+
+    // Keep detailed infrastructure errors server-side. The client receives only
+    // stable error codes, while Cloudflare Observability keeps the diagnostic.
+    console.error("MINIAPP_SESSION_ERROR", {
+      message,
+      supabaseConfigured: Boolean(env.supabaseUrl && env.supabaseSecretKey),
+      telegramConfigured: Boolean(env.telegramBotToken),
+    });
+
     if (message === "MINIAPP_USER_BLOCKED") return Response.json({ error: message }, { status: 403 });
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
     return Response.json({ error: "MINIAPP_SESSION_FAILED" }, { status: 500 });
