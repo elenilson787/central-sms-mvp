@@ -1,36 +1,31 @@
-import { getSupabaseAdmin } from "@/src/db/supabase-server";
-import { getPayment, verifyMercadoPagoWebhookSignature } from "@/src/payments/mercadopago";
-import { applyWalletTransaction } from "@/src/wallet/service";
+import { reconcileMercadoPagoPayment } from "@/src/payments/reconcile";
+import { verifyMercadoPagoWebhookSignature } from "@/src/payments/mercadopago";
 
 export async function POST(request: Request) {
   const url = new URL(request.url);
   const body = await request.json().catch(() => ({})) as { data?: { id?: string | number }; type?: string };
-  const dataId = url.searchParams.get("data.id") ?? (body.data?.id != null ? String(body.data.id) : null);
+  const signatureDataId = url.searchParams.get("data.id");
+  const resourceId = signatureDataId ?? (body.data?.id != null ? String(body.data.id) : null);
+
   const valid = verifyMercadoPagoWebhookSignature({
     xSignature: request.headers.get("x-signature"),
     xRequestId: request.headers.get("x-request-id"),
-    dataId,
+    dataId: signatureDataId,
   });
   if (!valid) return Response.json({ error: "invalid_signature" }, { status: 401 });
-  if (!dataId) return Response.json({ ok: true, ignored: "no_data_id" });
 
-  const payment = await getPayment(dataId);
-  const supabase = getSupabaseAdmin();
-  const { data: local, error } = await supabase.from("payments").select("*").eq("external_payment_id", String(payment.id)).maybeSingle();
-  if (error) throw error;
-  if (!local) return Response.json({ ok: true, ignored: "unknown_payment" });
-
-  const normalizedStatus = String(payment.status ?? "unknown");
-  await supabase.from("payments").update({ status: normalizedStatus, paid_at: normalizedStatus === "approved" ? new Date().toISOString() : local.paid_at, updated_at: new Date().toISOString() }).eq("id", local.id);
-
-  if (normalizedStatus === "approved") {
-    await applyWalletTransaction({
-      userId: local.user_id,
-      type: "deposit",
-      amountCents: Number(local.amount_cents),
-      referenceId: `payment:${local.id}:credit`,
-      metadata: { external_payment_id: String(payment.id) },
-    });
+  const notificationType = url.searchParams.get("type") ?? body.type;
+  if (notificationType && notificationType !== "payment") {
+    return Response.json({ ok: true, ignored: "unsupported_notification_type" });
   }
-  return Response.json({ ok: true });
+  if (!resourceId) return Response.json({ ok: true, ignored: "no_data_id" });
+
+  try {
+    const result = await reconcileMercadoPagoPayment(resourceId);
+    return Response.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    console.error("[mercadopago-webhook] reconciliation failed", { resourceId, message });
+    return Response.json({ error: "reconciliation_failed" }, { status: 500 });
+  }
 }
