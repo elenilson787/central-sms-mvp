@@ -16,7 +16,6 @@ test("package remains private", async () => {
 test("Mini App authenticates with raw initData and server-side signature validation", async () => {
   const auth = await readFile(new URL("../src/telegram/miniapp-auth.ts", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
-
   assert.match(auth, /params\.delete\("hash"\)/);
   assert.match(auth, /WebAppData/);
   assert.match(auth, /TELEGRAM_INIT_DATA_SIGNATURE_INVALID/);
@@ -35,7 +34,6 @@ test("preview catalog cannot execute provider purchases", async () => {
   const catalog = await readFile(new URL("../src/catalog/preview.ts", import.meta.url), "utf8");
   const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/quote/route.ts", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
-
   assert.match(catalog, /preview: true/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /PREVIEW_CATALOG_ONLY/);
@@ -43,12 +41,17 @@ test("preview catalog cannot execute provider purchases", async () => {
   assert.match(page, /Nenhuma compra, reserva ou débito foi executado/);
 });
 
-test("preview pricing is calculated server-side", async () => {
+test("preview pricing is calculated server-side and customer sees only final price", async () => {
   const pricing = await readFile(new URL("../src/pricing/quote.ts", import.meta.url), "utf8");
   const catalogRoute = await readFile(new URL("../app/api/catalog/route.ts", import.meta.url), "utf8");
-
+  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/quote/route.ts", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
   assert.match(pricing, /markupPercent/);
   assert.match(pricing, /markupFixedBrlCents/);
   assert.match(pricing, /salePriceCents/);
   assert.match(catalogRoute, /quoteOffer/);
+  assert.doesNotMatch(quoteRoute, /providerCostBrlCents/);
+  assert.doesNotMatch(quoteRoute, /markupPercent/);
+  assert.doesNotMatch(page, /Markup:/);
+  assert.match(page, /Preço final/);
 });

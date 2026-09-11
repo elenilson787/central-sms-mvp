@@ -43,7 +43,10 @@ export async function POST(request: Request) {
         kind: offer.kind,
         stock: offer.stock,
       },
-      quote,
+      price: {
+        salePriceCents: quote.salePriceCents,
+        currency: quote.currency,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
