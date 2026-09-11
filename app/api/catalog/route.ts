@@ -38,10 +38,14 @@ export async function GET(request: Request) {
 
     if (preview) {
       const previewCountry = url.searchParams.has("country") ? country : "all";
-      const offers = listPreviewOffers({ country: previewCountry, kind, search }).map((offer) => ({
-        ...offer,
-        quote: quoteOffer(offer),
-      }));
+      const offers = listPreviewOffers({ country: previewCountry, kind, search }).map((offer) => {
+        const pricing = quoteOffer(offer);
+        return {
+          ...offer,
+          salePriceCents: pricing.salePriceCents,
+          currency: pricing.currency,
+        };
+      });
       return Response.json({
         provider: "preview",
         mode: "preview",
