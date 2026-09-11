@@ -12,3 +12,21 @@ test("package remains private", async () => {
   const pkg = JSON.parse(raw);
   assert.equal(pkg.private, true);
 });
+
+test("Mini App authenticates with raw initData and server-side signature validation", async () => {
+  const auth = await readFile(new URL("../src/telegram/miniapp-auth.ts", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
+
+  assert.match(auth, /params\.delete\("hash"\)/);
+  assert.match(auth, /WebAppData/);
+  assert.match(auth, /TELEGRAM_INIT_DATA_SIGNATURE_INVALID/);
+  assert.match(auth, /maxAgeSeconds/);
+  assert.doesNotMatch(page, /initDataUnsafe/);
+  assert.match(page, /webApp\.initData/);
+});
+
+test("Telegram webhook remains protected by secret token", async () => {
+  const webhook = await readFile(new URL("../app/api/telegram/webhook/route.ts", import.meta.url), "utf8");
+  assert.match(webhook, /x-telegram-bot-api-secret-token/);
+  assert.match(webhook, /telegramWebhookSecret/);
+});
