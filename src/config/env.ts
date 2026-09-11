@@ -10,6 +10,7 @@ export const env = {
   cronSecret: optional("CRON_SECRET"),
   telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
   telegramWebhookSecret: optional("TELEGRAM_WEBHOOK_SECRET"),
+  telegramMiniAppUrl: optional("TELEGRAM_MINI_APP_URL"),
   supabaseUrl: optional("SUPABASE_URL"),
   supabaseSecretKey: optional("SUPABASE_SECRET_KEY"),
   fiveSimToken: optional("FIVESIM_TOKEN"),
