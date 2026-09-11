@@ -62,13 +62,15 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
       .select("balance_cents,currency")
       .single();
 
-    if (walletCreateError) {
+    if (walletCreateError || !createdWallet) {
       const retry = await supabase
         .from("wallets")
         .select("balance_cents,currency")
         .eq("user_id", appUser.id)
         .single();
-      if (retry.error || !retry.data) throw new Error(`MINIAPP_WALLET_CREATE_FAILED:${walletCreateError.message}`);
+      if (retry.error || !retry.data) {
+        throw new Error(`MINIAPP_WALLET_CREATE_FAILED:${walletCreateError?.message ?? retry.error?.message ?? "unknown"}`);
+      }
       wallet = retry.data;
     } else {
       wallet = createdWallet;
