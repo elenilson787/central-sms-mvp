@@ -7,6 +7,13 @@ export function getSupabaseAdmin() {
   }
 
   return createClient(env.supabaseUrl, env.supabaseSecretKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      fetch: fetch.bind(globalThis),
+    },
   });
 }
