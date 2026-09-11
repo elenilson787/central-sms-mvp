@@ -1,0 +1,200 @@
+.panel {
+  display: grid;
+  gap: 14px;
+}
+
+.intro,
+.statusCard,
+.success,
+.error {
+  border-radius: 16px;
+  padding: 15px;
+  background: var(--tg-theme-secondary-bg-color, #131d2d);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 18%, transparent);
+}
+
+.intro {
+  display: grid;
+  gap: 5px;
+}
+
+.intro strong {
+  font-size: 16px;
+}
+
+.intro span,
+.privacy {
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.quickValues {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quickValues button,
+.secondary,
+.textButton {
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 24%, transparent);
+  background: var(--tg-theme-secondary-bg-color, #131d2d);
+  color: var(--tg-theme-text-color, #f8fafc);
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: -8px;
+}
+
+.input,
+.moneyInput,
+.code {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 24%, transparent);
+  background: var(--tg-theme-secondary-bg-color, #131d2d);
+  color: var(--tg-theme-text-color, #f8fafc);
+  font: inherit;
+}
+
+.input {
+  padding: 13px;
+}
+
+.moneyInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+}
+
+.moneyInput span {
+  font-weight: 800;
+}
+
+.moneyInput input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  padding: 13px 0;
+  font: inherit;
+}
+
+.documentRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+}
+
+.documentRow > div {
+  display: grid;
+  gap: 10px;
+}
+
+.primary {
+  border: 0;
+  border-radius: 13px;
+  padding: 14px 16px;
+  background: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #fff);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.statusCard {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.statusCard strong {
+  font-size: 20px;
+}
+
+.statusLabel {
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 13px;
+}
+
+.qrWrap {
+  background: #fff;
+  border-radius: 18px;
+  padding: 12px;
+  width: min(100%, 280px);
+  margin: 0 auto;
+}
+
+.qr {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.code {
+  resize: none;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.secondary {
+  font-weight: 750;
+}
+
+.link,
+.textButton {
+  text-align: center;
+  font-size: 13px;
+}
+
+.link {
+  color: var(--tg-theme-link-color, #2ea6ff);
+  text-decoration: none;
+}
+
+.textButton {
+  border: 0;
+  background: transparent;
+  color: var(--tg-theme-link-color, #2ea6ff);
+}
+
+.success {
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.24);
+}
+
+.error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.28);
+}
+
+.privacy {
+  margin: -2px 0 0;
+}
+
+@media (max-width: 420px) {
+  .quickValues {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .documentRow {
+    grid-template-columns: 100px 1fr;
+  }
+}

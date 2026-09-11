@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import PixRechargePanel from "./PixRechargePanel";
 import styles from "./page.module.css";
 
 type NumberKind = "ONE_TIME_SMS" | "TEMPORARY_HOSTING";
-type View = "home" | "catalog" | "activations";
+type View = "home" | "catalog" | "activations" | "pix";
 
 type Activation = {
   id: string; kind: NumberKind; country: string; product: string; phone?: string;
@@ -56,6 +57,13 @@ function popup(title: string, message: string) {
   const webApp = window.Telegram?.WebApp;
   webApp?.HapticFeedback?.impactOccurred("light");
   webApp?.showPopup({ title, message, buttons: [{ type: "ok" }] });
+}
+
+function viewTitle(view: View) {
+  if (view === "catalog") return "Catálogo";
+  if (view === "activations") return "Ativações";
+  if (view === "pix") return "Recarregar via PIX";
+  return "Central SMS";
 }
 
 export default function TelegramMiniAppPage() {
@@ -153,7 +161,7 @@ export default function TelegramMiniAppPage() {
           <div className={styles.brand}>
             {view !== "home" && <button className={styles.back} type="button" onClick={() => setView("home")} aria-label="Voltar">←</button>}
             <div className={styles.logo}>📲</div>
-            <div><h1 className={styles.title}>{view === "home" ? "Central SMS" : view === "catalog" ? "Catálogo" : "Ativações"}</h1><p className={styles.subtitle}>{session ? `Olá, ${session.user.firstName}` : "Telegram Mini App"}</p></div>
+            <div><h1 className={styles.title}>{viewTitle(view)}</h1><p className={styles.subtitle}>{session ? `Olá, ${session.user.firstName}` : "Telegram Mini App"}</p></div>
           </div>
           <button className={styles.refresh} type="button" onClick={() => void loadSession()} disabled={loading}>{loading ? "…" : "↻"}</button>
         </header>
@@ -166,11 +174,13 @@ export default function TelegramMiniAppPage() {
           <section className={styles.grid} aria-label="Ações principais">
             <button className={styles.action} type="button" onClick={goCatalog}><div className={styles.actionIcon}>📱</div><span className={styles.actionTitle}>Comprar número</span><span className={styles.actionText}>Escolher país, serviço e tipo de ativação</span></button>
             <button className={styles.action} type="button" onClick={goCatalog}><div className={styles.actionIcon}>🌎</div><span className={styles.actionTitle}>Países e serviços</span><span className={styles.actionText}>Catálogo, estoque e preço final</span></button>
-            <button className={styles.action} type="button" onClick={() => popup("Recarregar", "O fluxo PIX será conectado na próxima etapa. Nenhuma cobrança foi criada.")}><div className={styles.actionIcon}>💳</div><span className={styles.actionTitle}>Recarregar</span><span className={styles.actionText}>Adicionar saldo via PIX</span></button>
+            <button className={styles.action} type="button" onClick={() => setView("pix")}><div className={styles.actionIcon}>💳</div><span className={styles.actionTitle}>Recarregar</span><span className={styles.actionText}>Adicionar saldo via PIX</span></button>
             <button className={styles.action} type="button" onClick={() => setView("activations")}><div className={styles.actionIcon}>📋</div><span className={styles.actionTitle}>Ativações</span><span className={styles.actionText}>Status, números e histórico recente</span></button>
           </section>
           <section className={styles.section}><div className={styles.sectionHeader}><h2 className={styles.sectionTitle}>Ativações recentes</h2><span className={styles.badge}>{recentList.length}/5</span></div><ActivationList activations={recentList} currency={session.wallet.currency} compact /></section>
         </>}
+
+        {session && view === "pix" && <PixRechargePanel onBalanceUpdated={loadSession} />}
 
         {session && view === "catalog" && <section className={styles.catalogSection}>
           <div className={styles.previewNotice}><strong>Modo de demonstração</strong><span>Estoque e preços abaixo servem para validar a experiência. Nenhuma oferta reserva número em provider externo.</span></div>

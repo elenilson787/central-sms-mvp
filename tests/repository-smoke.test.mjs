@@ -7,6 +7,15 @@ test("repository defaults keep live purchases disabled", async () => {
   assert.match(envExample, /^PURCHASES_ENABLED=false$/m);
 });
 
+test("PIX remains disabled until gateway and webhook are configured", async () => {
+  const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
+  const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
+  assert.match(envExample, /^PIX_ENABLED=false$/m);
+  assert.match(pixRoute, /PIX_DISABLED/);
+  assert.match(pixRoute, /PIX_GATEWAY_NOT_CONFIGURED/);
+  assert.match(pixRoute, /validateTelegramMiniAppInitData/);
+});
+
 test("package remains private", async () => {
   const raw = await readFile(new URL("../package.json", import.meta.url), "utf8");
   const pkg = JSON.parse(raw);
@@ -28,6 +37,29 @@ test("Telegram webhook remains protected by secret token", async () => {
   const webhook = await readFile(new URL("../app/api/telegram/webhook/route.ts", import.meta.url), "utf8");
   assert.match(webhook, /x-telegram-bot-api-secret-token/);
   assert.match(webhook, /telegramWebhookSecret/);
+});
+
+test("Mercado Pago webhook validates signature and reconciles server-side payment", async () => {
+  const gateway = await readFile(new URL("../src/payments/mercadopago.ts", import.meta.url), "utf8");
+  const webhook = await readFile(new URL("../app/api/webhooks/mercadopago/route.ts", import.meta.url), "utf8");
+  const reconcile = await readFile(new URL("../src/payments/reconcile.ts", import.meta.url), "utf8");
+  assert.match(gateway, /x-idempotency-key/);
+  assert.match(gateway, /createHmac\("sha256"/);
+  assert.match(gateway, /timingSafeEqual/);
+  assert.match(webhook, /verifyMercadoPagoWebhookSignature/);
+  assert.match(webhook, /reconcileMercadoPagoPayment/);
+  assert.match(reconcile, /PAYMENT_INTEGRITY_MISMATCH/);
+  assert.match(reconcile, /payment_method_id/);
+  assert.match(reconcile, /currency_id/);
+  assert.match(reconcile, /referenceId: `payment:\$\{local\.id\}:credit`/);
+});
+
+test("PIX payer PII is not inserted into local payments table", async () => {
+  const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
+  const insertBlock = pixRoute.slice(pixRoute.indexOf('from("payments").insert'), pixRoute.indexOf("const payment = await createPixPayment"));
+  assert.doesNotMatch(insertBlock, /payerEmail/);
+  assert.doesNotMatch(insertBlock, /documentNumber/);
+  assert.match(pixRoute, /createPixPayment/);
 });
 
 test("preview catalog cannot execute provider purchases", async () => {
