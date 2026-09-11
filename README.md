@@ -1,122 +1,124 @@
 # CENTRAL SMS — MVP
 
-Starter full-stack para uma plataforma de números virtuais via Telegram. O sistema é uma camada de agregação de providers: não opera SIM cards próprios.
+Plataforma modular via Telegram para catálogo, carteira, pagamentos e integrações com provedores de números/SMS, construída com Next.js, TypeScript e Supabase/PostgreSQL.
 
-## O que já está implementado
+> Estado atual: **bootstrap seguro**. A estrutura e os contratos estão no repositório, mas compras reais de números e cobranças PIX permanecem desativadas até configuração e revisão das integrações externas.
 
-- Next.js App Router com endpoints server-side.
-- Telegram Bot API via webhook e `secret_token`.
-- Catálogo real da 5SIM: países/produtos/preço/estoque; o catálogo público mostra somente serviços aprovados.
-- Dois tipos de produto: `ONE_TIME_SMS` e `TEMPORARY_HOSTING`.
-- Adapter 5SIM para compra, consulta de SMS, cancelamento e finalização.
-- Histórico idempotente de SMS por ativação (`activation_sms`), inclusive vários SMS no mesmo número alugado.
-- `ProviderRouter` preparado para segundo fornecedor.
-- Supabase: usuários Telegram, carteira, ledger, ativações, políticas, pagamentos e auditoria.
-- Débito/crédito atômico e idempotente via função Postgres.
-- Compra com refund automático se o provider falhar.
-- Polling por cron protegido, limitado a 25 ativações por execução, mantendo rentals/hosting ativos após o primeiro SMS.
-- Notificação automática no Telegram quando um SMS novo é persistido.
-- Mercado Pago PIX: criação via `/v1/payments`, `X-Idempotency-Key`, webhook HMAC e crédito idempotente.
-- Compliance: serviço precisa ser explicitamente aprovado; categorias de maior risco ficam bloqueadas.
-- Rate limit persistente no PostgreSQL para comandos do Telegram.
-- Audit log para eventos sensíveis do fluxo de compra e ajustes administrativos.
-- Endpoints administrativos protegidos para ajuste de saldo de teste e compra controlada de ativação/hosting.
+## Stack
 
-## Travas de segurança/comercial
+- Next.js App Router
+- TypeScript
+- Supabase/PostgreSQL
+- Telegram Bot API
+- GitHub Actions
+- Vercel como opção de deploy
 
-1. `PURCHASES_ENABLED=false` por padrão.
-2. Todo produto precisa existir em `service_policies` com `enabled=true`.
-3. Categorias bancárias, pagamentos, cripto, KYC/identidade, governo e telecom ficam bloqueadas no código.
-4. `FIVESIM_PRICE_CURRENCY` está como `UNCONFIRMED`: a documentação da API mostra preço numérico, mas a página consultada não identifica a moeda. Confirme isso antes de converter para BRL.
-5. A API da 5SIM permite integração automatizada, mas a permissão de revenda para usuários finais deve ser confirmada por escrito antes de colocar o marketplace em produção.
+## Estrutura
 
-Veja também [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) para o desenho técnico e [`docs/RESEARCH.md`](docs/RESEARCH.md) para a pesquisa/decisão de providers e PIX.
+```text
+app/                 rotas e interface Next.js
+src/                 serviços de domínio e integrações
+supabase/schema.sql  schema inicial do banco
+tests/               smoke tests
+.github/workflows/   CI
+docs/                arquitetura, pesquisa e desenvolvimento
+```
 
-## Setup local
+## Capacidades modeladas
+
+- usuários Telegram;
+- carteira em BRL com ledger;
+- transações `deposit`, `purchase`, `refund` e `adjustment`;
+- catálogo com allowlist por `service_policies`;
+- dois tipos de número: `ONE_TIME_SMS` e `TEMPORARY_HOSTING`;
+- ativações e histórico de SMS;
+- pagamentos;
+- rate limiting persistente;
+- audit logs;
+- abstração genérica de providers.
+
+## Travas atuais
+
+- `PURCHASES_ENABLED=false` por padrão;
+- adapter externo de provider está em modo bootstrap e não executa compras;
+- integração PIX está em modo bootstrap e não cria cobranças reais;
+- categorias de maior risco são bloqueadas pela camada de compliance;
+- nenhum segredo deve ser versionado.
+
+Isso permite desenvolver banco, bot, painel e regras de negócio sem movimentar dinheiro nem consumir números reais por acidente.
+
+## Setup em ambiente de desenvolvimento
 
 ```bash
 cp .env.example .env.local
 npm install
 npm run typecheck
+npm test
 npm run dev
 ```
 
-> O sandbox usado para gerar este starter não possui acesso npm externo; por isso o `package-lock.json` deve ser gerado no primeiro `npm install` em um ambiente com internet e então commitado.
+Para trabalhar sem PC, use GitHub Codespaces quando disponível. O fluxo recomendado está em [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## CI
+
+Todo Pull Request para `main` executa:
+
+```text
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+O workflow está em `.github/workflows/ci.yml`.
 
 ## Supabase
 
-Use um projeto dedicado. Revise `supabase/schema.sql` no SQL Editor e aplique somente após revisar. O modelo é backend-only: `anon` e `authenticated` não possuem acesso às tabelas.
+O schema inicial está em [`supabase/schema.sql`](supabase/schema.sql).
 
-Depois, adicione um serviço permitido explicitamente, por exemplo (use somente um serviço que você tenha revisado):
+Ele inclui:
 
-```sql
-insert into public.service_policies(provider, product, enabled, risk_category, notes)
-values ('5sim', 'SEU_PRODUCT_SLUG', true, 'standard', 'Aprovado pelo administrador após revisão de termos');
+- `app_users`
+- `wallets`
+- `wallet_transactions`
+- `service_policies`
+- `activations`
+- `activation_sms`
+- `payments`
+- `rate_limit_buckets`
+- `audit_logs`
+- funções atômicas para carteira e rate limit
+
+O modelo inicial é backend-only: tabelas têm RLS habilitado e privilégios de `anon`/`authenticated` são revogados.
+
+## Segurança
+
+Nunca envie ao GitHub:
+
+```text
+.env
+.env.local
+TELEGRAM_BOT_TOKEN
+SUPABASE_SECRET_KEY
+MERCADO_PAGO_ACCESS_TOKEN
+FIVESIM_TOKEN
 ```
 
-Não cadastre serviços de KYC, governo, bancos, pagamentos, cripto ou telecom.
-
-## Telegram
-
-Configure o webhook do Bot API para:
-
-`POST https://SEU_DOMINIO/api/telegram/webhook`
-
-Use o mesmo valor de `TELEGRAM_WEBHOOK_SECRET` como `secret_token` ao registrar o webhook.
-
-Comandos iniciais:
-
-- `/start`
-- `/catalogo brazil`
-- `/saldo`
-- `/ajuda`
-
-O catálogo público consulta a 5SIM sem gastar saldo, mas só exibe produtos previamente aprovados em `service_policies`. Para diagnóstico administrativo, `GET /api/catalog?country=brazil&raw=1` exige `Authorization: Bearer $ADMIN_API_TOKEN`.
-
-## Fluxo de compra real
-
-O serviço de domínio `purchaseActivation()` já implementa:
-
-1. valida configuração e compliance;
-2. busca oferta/estoque atual;
-3. calcula preço de venda;
-4. cria intenção idempotente;
-5. debita carteira atomicamente;
-6. pede o número ao provider;
-7. grava número e expiração;
-8. se o provider falhar, reembolsa a carteira idempotentemente.
-
-A compra ainda não está exposta como comando público do Telegram neste starter. Isso é intencional: primeiro valide provider, moeda, regra de markup e autorização comercial. Para teste controlado existe `POST /api/admin/activations/purchase`, protegido por `ADMIN_API_TOKEN`; ele continua obedecendo `PURCHASES_ENABLED` e `service_policies`.
-
-Para carregar saldo fictício/manual durante o MVP existe `POST /api/admin/wallet/adjust`, também protegido por `ADMIN_API_TOKEN` e com referência idempotente.
-
-## Número temporário por período
-
-Na 5SIM a categoria é `hosting`. O adapter usa:
-
-`/v1/user/buy/hosting/{country}/{operator}/{product}`
-
-Os nomes/durações disponíveis não são inventados: vêm de `/v1/guest/products/{country}/{operator}` e são filtrados pela categoria `hosting`. O banco guarda cada SMS em `activation_sms`, de forma que um número temporário por período pode receber várias mensagens sem encerrar o monitoramento após a primeira.
-
-## PIX
-
-`POST /api/payments/pix` está protegido por `ADMIN_API_TOKEN` e cria uma cobrança PIX com idempotência. Não coloque CPF/CNPJ em mensagens comuns do Telegram; use um formulário HTTPS/Telegram Web App antes de expor essa rota ao usuário final.
-
-O webhook `/api/webhooks/mercadopago`:
-
-- valida `x-signature` com HMAC-SHA256;
-- consulta o pagamento no Mercado Pago;
-- atualiza o registro local;
-- credita saldo somente no status `approved`;
-- usa referência única para impedir crédito duplicado.
+Use secrets/environment variables do ambiente de deploy.
 
 ## Próximas etapas
 
-1. Criar projeto Supabase dedicado e aplicar o schema.
-2. Criar bot Telegram e configurar webhook.
-3. Criar conta 5SIM de teste, confirmar moeda e permissão comercial/revenda.
-4. Popular apenas serviços aprovados em `service_policies`.
-5. Testar catálogo em produção sem habilitar compras.
-6. Inserir saldo manual de teste e executar uma ativação de baixo valor em conta própria.
-7. Só depois ativar PIX e painel administrativo.
-8. Adicionar SMSPool como segundo provider/fallback após confirmar catálogo e termos comerciais atuais.
+1. Fazer o bootstrap do projeto Supabase dedicado.
+2. Validar schema e advisors do Supabase.
+3. Implementar o bot Telegram em feature branch.
+4. Configurar catálogo somente leitura.
+5. Revisar documentação/termos comerciais do provider escolhido.
+6. Implementar integração externa em branch própria, mantendo compras desligadas até aprovação.
+7. Implementar PIX e webhook em branch própria.
+8. Adicionar painel administrativo.
+
+Veja também:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/RESEARCH.md`](docs/RESEARCH.md)
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
