@@ -29,15 +29,20 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 async function hmacSha256(key: Uint8Array, message: string): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key,
+    asArrayBuffer(key),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+  const encodedMessage = new TextEncoder().encode(message);
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, asArrayBuffer(encodedMessage));
   return new Uint8Array(signature);
 }
 
