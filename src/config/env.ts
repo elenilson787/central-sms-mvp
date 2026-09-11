@@ -1,0 +1,27 @@
+function optional(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
+export const env = {
+  appBaseUrl: optional("APP_BASE_URL"),
+  purchasesEnabled: optional("PURCHASES_ENABLED") === "true",
+  adminApiToken: optional("ADMIN_API_TOKEN"),
+  cronSecret: optional("CRON_SECRET"),
+  telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
+  telegramWebhookSecret: optional("TELEGRAM_WEBHOOK_SECRET"),
+  supabaseUrl: optional("SUPABASE_URL"),
+  supabaseSecretKey: optional("SUPABASE_SECRET_KEY"),
+  fiveSimToken: optional("FIVESIM_TOKEN"),
+  fiveSimPriceCurrency: optional("FIVESIM_PRICE_CURRENCY") ?? "UNCONFIRMED",
+  markupPercent: Number(optional("DEFAULT_MARKUP_PERCENT") ?? "30"),
+  markupFixedBrlCents: Number(optional("DEFAULT_MARKUP_FIXED_BRL_CENTS") ?? "20"),
+  providerToBrlRate: optional("PROVIDER_TO_BRL_RATE") ? Number(optional("PROVIDER_TO_BRL_RATE")) : undefined,
+  mercadoPagoAccessToken: optional("MERCADO_PAGO_ACCESS_TOKEN"),
+  mercadoPagoWebhookSecret: optional("MERCADO_PAGO_WEBHOOK_SECRET"),
+};
+
+export function requirePurchaseConfiguration() {
+  if (!env.purchasesEnabled) throw new Error("PURCHASES_DISABLED");
+  throw new Error("LIVE_PROVIDER_OPERATIONS_NOT_ENABLED_IN_BOOTSTRAP");
+}
