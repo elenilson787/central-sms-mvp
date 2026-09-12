@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
-import { createPixPayment } from "@/src/payments/mercadopago";
+import { createPixOrder, normalizeOrderStatus, orderPixData } from "@/src/payments/mercadopago";
 import { consumeRateLimit } from "@/src/security/rate-limit";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const preInsert = await supabase.from("payments").insert({
       id,
       user_id: session.user.id,
-      provider: "mercado_pago",
+      provider: "mercado_pago_orders",
       external_payment_id: `pending:${id}`,
       external_reference: externalReference,
       amount_cents: amountCents,
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     if (preInsert.error) throw preInsert.error;
 
     try {
-      const payment = await createPixPayment({
+      const order = await createPixOrder({
         amountCents,
         description: "Recarga de saldo Central SMS",
         payerEmail,
@@ -77,15 +77,16 @@ export async function POST(request: Request) {
         externalReference,
         idempotencyKey: id,
       });
-      if (payment.id == null) throw new Error("MERCADO_PAGO_PAYMENT_ID_MISSING");
+      if (!order.id) throw new Error("MERCADO_PAGO_ORDER_ID_MISSING");
 
-      const transactionData = payment.point_of_interaction?.transaction_data ?? {};
+      const pix = orderPixData(order);
+      const normalizedStatus = normalizeOrderStatus(order);
       const update = await supabase.from("payments").update({
-        external_payment_id: String(payment.id),
-        status: String(payment.status ?? "pending"),
-        qr_code_text: transactionData.qr_code ?? null,
-        qr_code_base64: transactionData.qr_code_base64 ?? null,
-        ticket_url: transactionData.ticket_url ?? null,
+        external_payment_id: String(order.id),
+        status: normalizedStatus,
+        qr_code_text: pix.qrCode,
+        qr_code_base64: pix.qrCodeBase64,
+        ticket_url: pix.ticketUrl,
         updated_at: new Date().toISOString(),
       }).eq("id", id);
       if (update.error) throw update.error;
@@ -94,11 +95,11 @@ export async function POST(request: Request) {
         ok: true,
         payment: {
           id,
-          status: String(payment.status ?? "pending"),
+          status: normalizedStatus,
           amountCents,
-          qrCode: transactionData.qr_code ?? null,
-          qrCodeBase64: transactionData.qr_code_base64 ?? null,
-          ticketUrl: transactionData.ticket_url ?? null,
+          qrCode: pix.qrCode,
+          qrCodeBase64: pix.qrCodeBase64,
+          ticketUrl: pix.ticketUrl,
         },
       }, { status: 201 });
     } catch (error) {
