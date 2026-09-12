@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
+import { currentPaymentEnvironment } from "@/src/payments/environment";
 import { createPixOrder, normalizeOrderStatus, orderPixData } from "@/src/payments/mercadopago";
 import { consumeRateLimit } from "@/src/security/rate-limit";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
@@ -72,11 +73,13 @@ export async function POST(request: Request) {
 
     const id = randomUUID();
     const externalReference = `wallet_deposit_${id}`;
+    const environment = currentPaymentEnvironment();
     const supabase = getSupabaseAdmin();
     const preInsert = await supabase.from("payments").insert({
       id,
       user_id: session.user.id,
       provider: "mercado_pago_orders",
+      environment,
       external_payment_id: `pending:${id}`,
       external_reference: externalReference,
       amount_cents: amountCents,
@@ -111,6 +114,7 @@ export async function POST(request: Request) {
       return Response.json({
         ok: true,
         testMode: env.mercadoPagoTestMode,
+        environment,
         payment: {
           id,
           status: normalizedStatus,
