@@ -14,6 +14,7 @@ type PixPayment = {
 
 type Props = {
   onBalanceUpdated: () => Promise<void> | void;
+  onPaymentConfirmed?: () => void;
 };
 
 function money(cents: number) {
@@ -51,7 +52,14 @@ function isTerminal(status: string) {
   return status === "approved" || status === "rejected" || status === "cancelled";
 }
 
-export default function PixRechargePanel({ onBalanceUpdated }: Props) {
+function nextAutoCheckDelay(elapsedMs: number) {
+  if (elapsedMs < 60_000) return 4_000;
+  if (elapsedMs < 180_000) return 10_000;
+  if (elapsedMs < 300_000) return 20_000;
+  return null;
+}
+
+export default function PixRechargePanel({ onBalanceUpdated, onPaymentConfirmed }: Props) {
   const [amountReais, setAmountReais] = useState("10,00");
   const [email, setEmail] = useState("");
   const [documentType, setDocumentType] = useState<"CPF" | "CNPJ">("CPF");
@@ -60,6 +68,7 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [resuming, setResuming] = useState(true);
+  const [autoCheckPaused, setAutoCheckPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const checkingRef = useRef(false);
@@ -76,16 +85,17 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
     if (completionHandledRef.current) return;
     completionHandledRef.current = true;
     setPayment((current) => current ? { ...current, status: "approved" } : current);
+    setAutoCheckPaused(false);
     setError(null);
     try {
       await onBalanceUpdated();
     } finally {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
       window.setTimeout(() => {
-        window.location.assign("/miniapp");
+        onPaymentConfirmed?.();
       }, 1200);
     }
-  }, [onBalanceUpdated]);
+  }, [onBalanceUpdated, onPaymentConfirmed]);
 
   const checkPayment = useCallback(async (paymentId: string, silent = false) => {
     if (checkingRef.current) return;
@@ -137,6 +147,7 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
         if (!response.ok) throw new Error(payload.error ?? "PIX_LATEST_FAILED");
         if (payload.payment) {
           setPayment(payload.payment);
+          setAutoCheckPaused(false);
           if (payload.payment.status === "approved") await finishApprovedPayment();
         }
       } catch {
@@ -150,10 +161,35 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
   }, [finishApprovedPayment]);
 
   useEffect(() => {
-    if (!payment || isTerminal(payment.status)) return;
-    void checkPayment(payment.id, true);
-    const timer = window.setInterval(() => void checkPayment(payment.id, true), 3500);
-    return () => window.clearInterval(timer);
+    if (!payment || isTerminal(payment.status)) {
+      setAutoCheckPaused(false);
+      return;
+    }
+
+    const startedAt = Date.now();
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = nextAutoCheckDelay(Date.now() - startedAt);
+      if (delay === null) {
+        setAutoCheckPaused(true);
+        return;
+      }
+      timer = window.setTimeout(async () => {
+        await checkPayment(payment.id, true);
+        scheduleNext();
+      }, delay);
+    };
+
+    setAutoCheckPaused(false);
+    void checkPayment(payment.id, true).finally(scheduleNext);
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [payment?.id, payment?.status, checkPayment]);
 
   async function createPayment() {
@@ -162,6 +198,7 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
     setLoading(true);
     setError(null);
     setCopied(false);
+    setAutoCheckPaused(false);
     completionHandledRef.current = false;
     try {
       const response = await fetch("/api/telegram/miniapp/pix", {
@@ -208,6 +245,7 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
     setPayment(null);
     setError(null);
     setCopied(false);
+    setAutoCheckPaused(false);
   }
 
   if (resuming && !payment) {
@@ -247,10 +285,14 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
 
         {waiting && (
           <div className={styles.confirming} aria-live="polite">
-            <span className={styles.spinner} aria-hidden="true" />
+            <span className={autoCheckPaused ? styles.pauseIcon : styles.spinner} aria-hidden="true">{autoCheckPaused ? "!" : ""}</span>
             <div>
-              <strong>Confirmando pagamento, aguarde…</strong>
-              <span>Assim que o Mercado Pago confirmar, o saldo será atualizado e você voltará automaticamente para a tela inicial.</span>
+              <strong>{autoCheckPaused ? "Pagamento ainda pendente" : "Confirmando pagamento, aguarde…"}</strong>
+              <span>
+                {autoCheckPaused
+                  ? "A verificação automática foi pausada após alguns minutos. Você pode verificar agora ou voltar mais tarde; a cobrança continuará recuperável."
+                  : "Assim que o Mercado Pago confirmar, o saldo será atualizado e você voltará automaticamente para a tela inicial."}
+              </span>
             </div>
           </div>
         )}
