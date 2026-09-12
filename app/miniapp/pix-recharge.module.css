@@ -192,20 +192,34 @@
   font-size: 14px;
 }
 
-.confirming span:not(.spinner) {
+.confirming span:not(.spinner):not(.pauseIcon) {
   color: var(--tg-theme-hint-color, #94a3b8);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.spinner {
+.spinner,
+.pauseIcon {
   width: 20px;
   height: 20px;
   flex: 0 0 20px;
   border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.spinner {
   border: 3px solid color-mix(in srgb, var(--tg-theme-button-color, #2481cc) 28%, transparent);
   border-top-color: var(--tg-theme-button-color, #2481cc);
   animation: pix-spin 0.9s linear infinite;
+}
+
+.pauseIcon {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--tg-theme-button-color, #2481cc) 18%, transparent);
+  color: var(--tg-theme-button-color, #2481cc);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 @keyframes pix-spin {
