@@ -35,16 +35,28 @@ export async function POST(request: Request) {
   }
 
   const amountCents = Number(body.amountCents);
-  const payerEmail = String(body.payerEmail ?? "").trim().toLowerCase();
-  const documentType = body.documentType;
-  const documentNumber = cleanDocument(String(body.documentNumber ?? ""));
-  const documentLengthOk = documentType === "CPF" ? documentNumber.length === 11 : documentType === "CNPJ" ? documentNumber.length === 14 : false;
-
   if (!Number.isInteger(amountCents) || amountCents < env.pixMinDepositCents || amountCents > env.pixMaxDepositCents) {
     return Response.json({ error: "PIX_AMOUNT_OUT_OF_RANGE", minCents: env.pixMinDepositCents, maxCents: env.pixMaxDepositCents }, { status: 400 });
   }
-  if (!validEmail(payerEmail) || !documentType || !documentLengthOk) {
-    return Response.json({ error: "INVALID_PAYER_DATA" }, { status: 400 });
+  if (env.mercadoPagoTestMode && amountCents !== 5000) {
+    return Response.json({ error: "PIX_TEST_AMOUNT_REQUIRED", requiredCents: 5000 }, { status: 400 });
+  }
+
+  const payerEmail = env.mercadoPagoTestMode
+    ? "test_user_br@testuser.com"
+    : String(body.payerEmail ?? "").trim().toLowerCase();
+  const documentType: "CPF" | "CNPJ" = env.mercadoPagoTestMode
+    ? "CPF"
+    : (body.documentType ?? "CPF");
+  const documentNumber = env.mercadoPagoTestMode
+    ? "00000000000"
+    : cleanDocument(String(body.documentNumber ?? ""));
+
+  if (!env.mercadoPagoTestMode) {
+    const documentLengthOk = documentType === "CPF" ? documentNumber.length === 11 : documentNumber.length === 14;
+    if (!validEmail(payerEmail) || !body.documentType || !documentLengthOk) {
+      return Response.json({ error: "INVALID_PAYER_DATA" }, { status: 400 });
+    }
   }
 
   try {
@@ -93,6 +105,7 @@ export async function POST(request: Request) {
 
       return Response.json({
         ok: true,
+        testMode: env.mercadoPagoTestMode,
         payment: {
           id,
           status: normalizedStatus,
