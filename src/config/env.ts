@@ -23,6 +23,7 @@ export const env = {
   providerToBrlRate: optional("PROVIDER_TO_BRL_RATE") ? Number(optional("PROVIDER_TO_BRL_RATE")) : undefined,
   mercadoPagoAccessToken: optional("MERCADO_PAGO_ACCESS_TOKEN"),
   mercadoPagoWebhookSecret: optional("MERCADO_PAGO_WEBHOOK_SECRET"),
+  mercadoPagoTestMode: optional("MERCADO_PAGO_TEST_MODE") === "true",
 };
 
 export function requirePurchaseConfiguration() {
