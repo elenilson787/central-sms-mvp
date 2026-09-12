@@ -11,9 +11,19 @@ test("PIX remains disabled until gateway and webhook are configured", async () =
   const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
   const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
   assert.match(envExample, /^PIX_ENABLED=false$/m);
+  assert.match(envExample, /^MERCADO_PAGO_TEST_MODE=false$/m);
   assert.match(pixRoute, /PIX_DISABLED/);
   assert.match(pixRoute, /PIX_GATEWAY_NOT_CONFIGURED/);
   assert.match(pixRoute, /validateTelegramMiniAppInitData/);
+});
+
+test("Mercado Pago PIX test mode follows documented predefined Orders scenario", async () => {
+  const gateway = await readFile(new URL("../src/payments/mercadopago.ts", import.meta.url), "utf8");
+  const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
+  assert.match(gateway, /test_user_br@testuser\.com/);
+  assert.match(gateway, /first_name: "APRO"/);
+  assert.match(pixRoute, /amountCents !== 5000/);
+  assert.match(pixRoute, /PIX_TEST_AMOUNT_REQUIRED/);
 });
 
 test("package remains private", async () => {
