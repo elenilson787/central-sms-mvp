@@ -26,6 +26,12 @@ test("Mercado Pago PIX test mode follows documented predefined Orders scenario",
   assert.match(pixRoute, /PIX_TEST_AMOUNT_REQUIRED/);
 });
 
+test("Mercado Pago external reference uses only supported characters", async () => {
+  const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
+  assert.match(pixRoute, /wallet_deposit_\$\{id\}/);
+  assert.doesNotMatch(pixRoute, /wallet-deposit:\$\{id\}/);
+});
+
 test("package remains private", async () => {
   const raw = await readFile(new URL("../package.json", import.meta.url), "utf8");
   const pkg = JSON.parse(raw);

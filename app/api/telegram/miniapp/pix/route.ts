@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     if (!allowed) return Response.json({ error: "RATE_LIMITED" }, { status: 429 });
 
     const id = randomUUID();
-    const externalReference = `wallet-deposit:${id}`;
+    const externalReference = `wallet_deposit_${id}`;
     const supabase = getSupabaseAdmin();
     const preInsert = await supabase.from("payments").insert({
       id,
