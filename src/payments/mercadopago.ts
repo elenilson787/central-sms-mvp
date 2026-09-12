@@ -48,13 +48,34 @@ function requireAccessToken() {
   return env.mercadoPagoAccessToken;
 }
 
+function serializeProviderDetail(value: unknown) {
+  if (value === undefined || value === null) return "";
+  try {
+    const serialized = typeof value === "string" ? value : JSON.stringify(value);
+    return serialized.slice(0, 700);
+  } catch {
+    return String(value).slice(0, 700);
+  }
+}
+
 async function parseResponse(response: Response): Promise<Record<string, any>> {
   const payload = await response.json().catch(() => ({})) as Record<string, any>;
   if (!response.ok) {
     const firstError = Array.isArray(payload?.errors) ? payload.errors[0] : undefined;
-    const code = firstError?.code ?? payload?.cause?.[0]?.code ?? payload?.error ?? response.status;
-    const message = firstError?.message ?? payload?.message ?? payload?.error ?? "Mercado Pago request failed";
-    throw new Error(`MERCADO_PAGO_API_ERROR:${String(code)}:${String(message)}`);
+    const firstCause = Array.isArray(payload?.cause) ? payload.cause[0] : undefined;
+    const code = firstError?.code ?? firstCause?.code ?? payload?.error ?? response.status;
+    const message = firstError?.message ?? firstCause?.description ?? payload?.message ?? payload?.error ?? "Mercado Pago request failed";
+    const detail = serializeProviderDetail(
+      firstError?.details ??
+      firstError?.detail ??
+      firstCause?.details ??
+      firstCause?.data ??
+      payload?.details ??
+      payload?.detail,
+    );
+    throw new Error(
+      `MERCADO_PAGO_API_ERROR:${response.status}:${String(code)}:${String(message)}${detail ? `:DETAIL:${detail}` : ""}`,
+    );
   }
   return payload;
 }
