@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PixGlobalMonitor from "./PixGlobalMonitor";
+import PixPaymentHistory from "./PixPaymentHistory";
 import PixRechargePanel from "./PixRechargePanel";
 import styles from "./page.module.css";
 
@@ -187,12 +188,13 @@ export default function TelegramMiniAppPage() {
           <section className={styles.section}><div className={styles.sectionHeader}><h2 className={styles.sectionTitle}>Ativações recentes</h2><span className={styles.badge}>{recentList.length}/5</span></div><ActivationList activations={recentList} currency={session.wallet.currency} compact /></section>
         </>}
 
-        {session && view === "pix" && (
+        {session && view === "pix" && <>
           <PixRechargePanel
             onBalanceUpdated={loadSession}
             onPaymentConfirmed={() => setView("home")}
           />
-        )}
+          <PixPaymentHistory refreshKey={session.wallet.balanceCents} />
+        </>}
 
         {session && view === "catalog" && <section className={styles.catalogSection}>
           <div className={styles.previewNotice}><strong>Modo de demonstração</strong><span>Estoque e preços abaixo servem para validar a experiência. Nenhuma oferta reserva número em provider externo.</span></div>
