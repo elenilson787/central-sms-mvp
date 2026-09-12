@@ -41,6 +41,11 @@ export type MercadoPagoOrder = {
   };
 };
 
+export type MercadoPagoRefundResult = Record<string, unknown> & {
+  id?: string | number;
+  status?: string;
+};
+
 const API_BASE = "https://api.mercadopago.com";
 
 function requireAccessToken() {
@@ -157,6 +162,20 @@ export async function getOrder(orderId: string): Promise<MercadoPagoOrder> {
     },
   });
   return await parseResponse(response) as MercadoPagoOrder;
+}
+
+export async function refundOrder(orderId: string, idempotencyKey: string): Promise<MercadoPagoRefundResult> {
+  const token = requireAccessToken();
+  const response = await fetch(`${API_BASE}/v1/orders/${encodeURIComponent(orderId)}/refund`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-idempotency-key": idempotencyKey,
+    },
+  });
+  return await parseResponse(response) as MercadoPagoRefundResult;
 }
 
 export function primaryOrderPayment(order: MercadoPagoOrder): MercadoPagoOrderPayment | undefined {
