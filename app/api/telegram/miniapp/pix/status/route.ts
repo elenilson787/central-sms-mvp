@@ -1,5 +1,6 @@
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
+import { currentPaymentEnvironment } from "@/src/payments/environment";
 import { reconcileMercadoPagoOrder } from "@/src/payments/reconcile";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
@@ -20,11 +21,13 @@ export async function POST(request: Request) {
     const validated = await validateTelegramMiniAppInitData(body.initData ?? "", env.telegramBotToken, { maxAgeSeconds: 3600 });
     const session = await getOrCreateMiniAppSession(validated.user);
     const supabase = getSupabaseAdmin();
+    const environment = currentPaymentEnvironment();
     const localQuery = await supabase
       .from("payments")
-      .select("id,user_id,external_payment_id,status,amount_cents")
+      .select("id,user_id,external_payment_id,status,amount_cents,environment")
       .eq("id", body.paymentId)
       .eq("user_id", session.user.id)
+      .eq("environment", environment)
       .maybeSingle();
     if (localQuery.error) throw localQuery.error;
     if (!localQuery.data) return Response.json({ error: "PAYMENT_NOT_FOUND" }, { status: 404 });

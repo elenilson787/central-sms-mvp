@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { env } from "@/src/config/env";
 import { applyWalletTransaction } from "@/src/wallet/service";
 import { logAudit } from "@/src/audit/log";
+import { isAdminRequest } from "@/src/security/admin-auth";
 
 export async function POST(request: Request) {
-  if (!env.adminApiToken || request.headers.get("authorization") !== `Bearer ${env.adminApiToken}`) {
+  if (!isAdminRequest(request)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 

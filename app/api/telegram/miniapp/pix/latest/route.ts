@@ -1,5 +1,6 @@
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
+import { currentPaymentEnvironment } from "@/src/payments/environment";
 import { reconcileMercadoPagoOrder } from "@/src/payments/reconcile";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
@@ -13,8 +14,6 @@ type LocalPayment = {
   qr_code_base64?: string | null;
   ticket_url?: string | null;
 };
-
-const TEST_ORDER_PATTERN = "ORDTST%";
 
 function toClientPayment(payment: LocalPayment) {
   return {
@@ -42,25 +41,18 @@ export async function POST(request: Request) {
     const validated = await validateTelegramMiniAppInitData(body.initData ?? "", env.telegramBotToken, { maxAgeSeconds: 3600 });
     const session = await getOrCreateMiniAppSession(validated.user);
     const supabase = getSupabaseAdmin();
+    const environment = currentPaymentEnvironment();
 
-    const baseLatestQuery = supabase
+    const latestQuery = await supabase
       .from("payments")
       .select("id,external_payment_id,status,amount_cents,qr_code_text,qr_code_base64,ticket_url")
       .eq("user_id", session.user.id)
       .eq("provider", "mercado_pago_orders")
+      .eq("environment", environment)
       .in("status", ["creating", "pending", "in_process"])
       .order("created_at", { ascending: false })
-      .limit(1);
-
-    // Sandbox Orders use the ORDTST prefix. Never let stale test charges appear
-    // in production, and never let production Orders leak into sandbox recovery.
-    const latestQuery = env.mercadoPagoTestMode
-      ? await baseLatestQuery
-          .or("external_payment_id.like.ORDTST%,external_payment_id.like.pending:%")
-          .maybeSingle()
-      : await baseLatestQuery
-          .not("external_payment_id", "like", TEST_ORDER_PATTERN)
-          .maybeSingle();
+      .limit(1)
+      .maybeSingle();
 
     if (latestQuery.error) throw latestQuery.error;
     if (!latestQuery.data) {
@@ -75,7 +67,7 @@ export async function POST(request: Request) {
         await reconcileMercadoPagoOrder(externalOrderId);
       } catch (error) {
         const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
-        console.warn("[miniapp-pix-latest] reconciliation deferred", { paymentId: local.id, message });
+        console.warn("[miniapp-pix-latest] reconciliation deferred", { paymentId: local.id, environment, message });
       }
     }
 
@@ -84,6 +76,7 @@ export async function POST(request: Request) {
       .select("id,external_payment_id,status,amount_cents,qr_code_text,qr_code_base64,ticket_url")
       .eq("id", local.id)
       .eq("user_id", session.user.id)
+      .eq("environment", environment)
       .maybeSingle();
     if (refreshedPayment.error) throw refreshedPayment.error;
 

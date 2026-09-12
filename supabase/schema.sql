@@ -1,4 +1,4 @@
--- CENTRAL SMS MVP - bootstrap schema
+-- CENTRAL SMS MVP - canonical schema
 -- Apply to a dedicated Supabase project, review in SQL editor first.
 
 create extension if not exists pgcrypto;
@@ -103,6 +103,7 @@ create table if not exists public.payments (
   id uuid primary key,
   user_id uuid not null references public.app_users(id) on delete cascade,
   provider text not null,
+  environment text not null default 'production' check (environment in ('test','production')),
   external_payment_id text not null unique,
   external_reference text not null unique,
   amount_cents bigint not null check (amount_cents > 0),
@@ -114,6 +115,24 @@ create table if not exists public.payments (
   updated_at timestamptz not null default now(),
   paid_at timestamptz
 );
+create index if not exists payments_user_environment_created_idx on public.payments(user_id, environment, created_at desc);
+
+create table if not exists public.payment_refunds (
+  id uuid primary key default gen_random_uuid(),
+  payment_id uuid not null unique references public.payments(id) on delete restrict,
+  user_id uuid not null references public.app_users(id) on delete restrict,
+  environment text not null check (environment in ('test','production')),
+  idempotency_key text not null unique,
+  amount_cents bigint not null check (amount_cents > 0),
+  status text not null check (status in ('creating','wallet_reserved','completed')),
+  external_refund_id text,
+  reason text not null,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+create index if not exists payment_refunds_user_created_idx on public.payment_refunds(user_id, created_at desc);
 
 create table if not exists public.rate_limit_buckets (
   scope text not null,
@@ -216,12 +235,13 @@ alter table public.service_policies enable row level security;
 alter table public.activations enable row level security;
 alter table public.activation_sms enable row level security;
 alter table public.payments enable row level security;
+alter table public.payment_refunds enable row level security;
 alter table public.rate_limit_buckets enable row level security;
 alter table public.audit_logs enable row level security;
 
-revoke all on table public.app_users, public.wallets, public.wallet_transactions, public.service_policies, public.activations, public.activation_sms, public.payments, public.rate_limit_buckets, public.audit_logs from anon, authenticated;
+revoke all on table public.app_users, public.wallets, public.wallet_transactions, public.service_policies, public.activations, public.activation_sms, public.payments, public.payment_refunds, public.rate_limit_buckets, public.audit_logs from anon, authenticated;
 revoke execute on function public.rate_limit_consume(text, text, integer, integer) from public, anon, authenticated;
 revoke execute on function public.wallet_apply_transaction(uuid, public.wallet_transaction_type, bigint, text, jsonb) from public, anon, authenticated;
-grant select, insert, update, delete on table public.app_users, public.wallets, public.wallet_transactions, public.service_policies, public.activations, public.activation_sms, public.payments, public.rate_limit_buckets, public.audit_logs to service_role;
+grant select, insert, update, delete on table public.app_users, public.wallets, public.wallet_transactions, public.service_policies, public.activations, public.activation_sms, public.payments, public.payment_refunds, public.rate_limit_buckets, public.audit_logs to service_role;
 grant execute on function public.rate_limit_consume(text, text, integer, integer) to service_role;
 grant execute on function public.wallet_apply_transaction(uuid, public.wallet_transaction_type, bigint, text, jsonb) to service_role;

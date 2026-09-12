@@ -23,14 +23,14 @@ test("Mercado Pago webhook persists safe reconciliation audit records", async ()
   assert.doesNotMatch(webhook, /mercadoPagoWebhookSecret/);
 });
 
-test("PIX history is Telegram-authenticated and isolated by Mercado Pago environment", async () => {
+test("PIX history is Telegram-authenticated and isolated by explicit environment", async () => {
   const history = await readFile(new URL("../app/api/telegram/miniapp/pix/history/route.ts", import.meta.url), "utf8");
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
 
   assert.match(history, /validateTelegramMiniAppInitData/);
   assert.match(history, /\.eq\("user_id", session\.user\.id\)/);
-  assert.match(history, /mercadoPagoTestMode/);
-  assert.match(history, /ORDTST%/);
+  assert.match(history, /currentPaymentEnvironment/);
+  assert.match(history, /\.eq\("environment", environment\)/);
   assert.match(history, /\.limit\(8\)/);
   assert.match(page, /PixPaymentHistory/);
 });
