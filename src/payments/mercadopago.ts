@@ -62,16 +62,55 @@ async function parseResponse(response: Response): Promise<Record<string, any>> {
 export async function createPixOrder(input: PixInput): Promise<MercadoPagoOrder> {
   const token = requireAccessToken();
   const amount = (input.amountCents / 100).toFixed(2);
-  const payer = env.mercadoPagoTestMode
+
+  // Mercado Pago's PIX sandbox requires a predefined order payload. Keep it
+  // intentionally minimal so test-only fields do not diverge from the official
+  // scenario used to auto-approve the order.
+  const requestBody = env.mercadoPagoTestMode
     ? {
-        email: "test_user_br@testuser.com",
-        first_name: "APRO",
+        type: "online",
+        external_reference: input.externalReference,
+        total_amount: amount,
+        payer: {
+          email: "test_user_br@testuser.com",
+          first_name: "APRO",
+        },
+        transactions: {
+          payments: [
+            {
+              amount,
+              payment_method: {
+                id: "pix",
+                type: "bank_transfer",
+              },
+            },
+          ],
+        },
       }
     : {
-        email: input.payerEmail,
-        identification: {
-          type: input.documentType,
-          number: input.documentNumber,
+        type: "online",
+        total_amount: amount,
+        external_reference: input.externalReference,
+        processing_mode: "automatic",
+        description: input.description,
+        transactions: {
+          payments: [
+            {
+              amount,
+              payment_method: {
+                id: "pix",
+                type: "bank_transfer",
+              },
+              expiration_time: "PT24H",
+            },
+          ],
+        },
+        payer: {
+          email: input.payerEmail,
+          identification: {
+            type: input.documentType,
+            number: input.documentNumber,
+          },
         },
       };
 
@@ -83,26 +122,7 @@ export async function createPixOrder(input: PixInput): Promise<MercadoPagoOrder>
       accept: "application/json",
       "x-idempotency-key": input.idempotencyKey,
     },
-    body: JSON.stringify({
-      type: "online",
-      total_amount: amount,
-      external_reference: input.externalReference,
-      processing_mode: "automatic",
-      description: input.description,
-      transactions: {
-        payments: [
-          {
-            amount,
-            payment_method: {
-              id: "pix",
-              type: "bank_transfer",
-            },
-            expiration_time: "PT24H",
-          },
-        ],
-      },
-      payer,
-    }),
+    body: JSON.stringify(requestBody),
   });
   return await parseResponse(response) as MercadoPagoOrder;
 }
