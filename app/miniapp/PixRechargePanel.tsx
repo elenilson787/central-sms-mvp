@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./pix-recharge.module.css";
 
 type PixPayment = {
@@ -22,7 +22,7 @@ function money(cents: number) {
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    pending: "Aguardando pagamento",
+    pending: "Aguardando confirmação",
     approved: "Pagamento aprovado",
     rejected: "Pagamento rejeitado",
     cancelled: "Pagamento cancelado",
@@ -42,8 +42,13 @@ function userFriendlyError(code?: string) {
     RATE_LIMITED: "Muitas tentativas em pouco tempo. Aguarde alguns minutos.",
     PIX_CREATE_FAILED: "Não foi possível gerar a cobrança PIX agora.",
     PIX_STATUS_FAILED: "Não foi possível consultar o pagamento agora.",
+    PIX_LATEST_FAILED: "Não foi possível recuperar a cobrança pendente agora.",
   };
   return messages[code ?? ""] ?? code ?? "Não foi possível concluir a operação.";
+}
+
+function isTerminal(status: string) {
+  return status === "approved" || status === "rejected" || status === "cancelled";
 }
 
 export default function PixRechargePanel({ onBalanceUpdated }: Props) {
@@ -54,8 +59,12 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
   const [payment, setPayment] = useState<PixPayment | null>(null);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [resuming, setResuming] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const checkingRef = useRef(false);
+  const completionHandledRef = useRef(false);
+  const resumeStartedRef = useRef(false);
 
   function amountCents() {
     const normalized = amountReais.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
@@ -63,12 +72,97 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
     return Number.isFinite(value) ? Math.round(value * 100) : 0;
   }
 
+  const finishApprovedPayment = useCallback(async () => {
+    if (completionHandledRef.current) return;
+    completionHandledRef.current = true;
+    setPayment((current) => current ? { ...current, status: "approved" } : current);
+    setError(null);
+    try {
+      await onBalanceUpdated();
+    } finally {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
+      window.setTimeout(() => {
+        window.location.assign("/miniapp");
+      }, 1200);
+    }
+  }, [onBalanceUpdated]);
+
+  const checkPayment = useCallback(async (paymentId: string, silent = false) => {
+    if (checkingRef.current) return;
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return;
+
+    checkingRef.current = true;
+    if (!silent) setChecking(true);
+    if (!silent) setError(null);
+
+    try {
+      const response = await fetch("/api/telegram/miniapp/pix/status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ initData, paymentId }),
+      });
+      const payload = await response.json() as { status?: string; credited?: boolean; error?: string };
+      if (!response.ok || !payload.status) throw new Error(payload.error ?? "PIX_STATUS_FAILED");
+
+      setPayment((current) => current && current.id === paymentId ? { ...current, status: payload.status! } : current);
+      if (payload.credited || payload.status === "approved") {
+        await finishApprovedPayment();
+      }
+    } catch (cause) {
+      if (!silent) {
+        const code = cause instanceof Error ? cause.message : "PIX_STATUS_FAILED";
+        setError(userFriendlyError(code));
+      }
+    } finally {
+      checkingRef.current = false;
+      if (!silent) setChecking(false);
+    }
+  }, [finishApprovedPayment]);
+
+  useEffect(() => {
+    if (resumeStartedRef.current) return;
+    resumeStartedRef.current = true;
+
+    const resumeLatestPayment = async () => {
+      const initData = window.Telegram?.WebApp?.initData;
+      if (!initData) { setResuming(false); return; }
+      try {
+        const response = await fetch("/api/telegram/miniapp/pix/latest", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ initData }),
+        });
+        const payload = await response.json() as { payment?: PixPayment | null; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "PIX_LATEST_FAILED");
+        if (payload.payment) {
+          setPayment(payload.payment);
+          if (payload.payment.status === "approved") await finishApprovedPayment();
+        }
+      } catch {
+        // A falha ao retomar uma cobrança anterior não impede criar uma nova.
+      } finally {
+        setResuming(false);
+      }
+    };
+
+    void resumeLatestPayment();
+  }, [finishApprovedPayment]);
+
+  useEffect(() => {
+    if (!payment || isTerminal(payment.status)) return;
+    void checkPayment(payment.id, true);
+    const timer = window.setInterval(() => void checkPayment(payment.id, true), 3500);
+    return () => window.clearInterval(timer);
+  }, [payment?.id, payment?.status, checkPayment]);
+
   async function createPayment() {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) return;
     setLoading(true);
     setError(null);
     setCopied(false);
+    completionHandledRef.current = false;
     try {
       const response = await fetch("/api/telegram/miniapp/pix", {
         method: "POST",
@@ -88,39 +182,13 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
       }
       setPayment(payload.payment);
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
+      if (payload.payment.status === "approved") await finishApprovedPayment();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : userFriendlyError("PIX_CREATE_FAILED");
       setError(message);
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("error");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function checkPayment() {
-    if (!payment) return;
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) return;
-    setChecking(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/telegram/miniapp/pix/status", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ initData, paymentId: payment.id }),
-      });
-      const payload = await response.json() as { status?: string; credited?: boolean; error?: string };
-      if (!response.ok || !payload.status) throw new Error(payload.error ?? "PIX_STATUS_FAILED");
-      setPayment((current) => current ? { ...current, status: payload.status! } : current);
-      if (payload.credited || payload.status === "approved") {
-        await onBalanceUpdated();
-        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
-      }
-    } catch (cause) {
-      const code = cause instanceof Error ? cause.message : "PIX_STATUS_FAILED";
-      setError(userFriendlyError(code));
-    } finally {
-      setChecking(false);
     }
   }
 
@@ -135,7 +203,26 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
     }
   }
 
+  function resetPayment() {
+    completionHandledRef.current = false;
+    setPayment(null);
+    setError(null);
+    setCopied(false);
+  }
+
+  if (resuming && !payment) {
+    return (
+      <section className={styles.panel}>
+        <div className={styles.confirming}>
+          <span className={styles.spinner} aria-hidden="true" />
+          <div><strong>Verificando cobranças pendentes…</strong><span>Aguarde um instante.</span></div>
+        </div>
+      </section>
+    );
+  }
+
   if (payment) {
+    const waiting = !isTerminal(payment.status);
     return (
       <section className={styles.panel}>
         <div className={styles.statusCard}>
@@ -158,19 +245,36 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
           </>
         )}
 
-        {payment.status === "approved" ? (
-          <div className={styles.success}>Pagamento confirmado. O saldo da carteira já foi atualizado.</div>
-        ) : (
-          <button className={styles.secondary} type="button" onClick={() => void checkPayment()} disabled={checking}>
-            {checking ? "Verificando…" : "Já paguei — verificar"}
+        {waiting && (
+          <div className={styles.confirming} aria-live="polite">
+            <span className={styles.spinner} aria-hidden="true" />
+            <div>
+              <strong>Confirmando pagamento, aguarde…</strong>
+              <span>Assim que o Mercado Pago confirmar, o saldo será atualizado e você voltará automaticamente para a tela inicial.</span>
+            </div>
+          </div>
+        )}
+
+        {payment.status === "approved" && (
+          <div className={styles.success} aria-live="polite">Pagamento confirmado! Atualizando seu saldo e voltando para a tela inicial…</div>
+        )}
+
+        {payment.status === "rejected" && <div className={styles.error}>O pagamento foi rejeitado. Gere uma nova cobrança para tentar novamente.</div>}
+        {payment.status === "cancelled" && <div className={styles.error}>A cobrança foi cancelada ou expirou.</div>}
+
+        {waiting && (
+          <button className={styles.secondary} type="button" onClick={() => void checkPayment(payment.id, false)} disabled={checking}>
+            {checking ? "Verificando…" : "Verificar agora"}
           </button>
         )}
 
-        {payment.ticketUrl && payment.status !== "approved" && (
+        {payment.ticketUrl && waiting && (
           <a className={styles.link} href={payment.ticketUrl} target="_blank" rel="noreferrer">Abrir cobrança PIX</a>
         )}
         {error && <div className={styles.error}>{error}</div>}
-        <button className={styles.textButton} type="button" onClick={() => { setPayment(null); setError(null); }}>Gerar outra cobrança</button>
+        {(payment.status === "rejected" || payment.status === "cancelled") && (
+          <button className={styles.textButton} type="button" onClick={resetPayment}>Gerar outra cobrança</button>
+        )}
       </section>
     );
   }
