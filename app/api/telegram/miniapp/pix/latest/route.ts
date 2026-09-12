@@ -14,6 +14,8 @@ type LocalPayment = {
   ticket_url?: string | null;
 };
 
+const TEST_ORDER_PATTERN = "ORDTST%";
+
 function toClientPayment(payment: LocalPayment) {
   return {
     id: payment.id,
@@ -41,15 +43,24 @@ export async function POST(request: Request) {
     const session = await getOrCreateMiniAppSession(validated.user);
     const supabase = getSupabaseAdmin();
 
-    const latestQuery = await supabase
+    const baseLatestQuery = supabase
       .from("payments")
       .select("id,external_payment_id,status,amount_cents,qr_code_text,qr_code_base64,ticket_url")
       .eq("user_id", session.user.id)
       .eq("provider", "mercado_pago_orders")
       .in("status", ["creating", "pending", "in_process"])
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+
+    // Sandbox Orders use the ORDTST prefix. Never let stale test charges appear
+    // in production, and never let production Orders leak into sandbox recovery.
+    const latestQuery = env.mercadoPagoTestMode
+      ? await baseLatestQuery
+          .or("external_payment_id.like.ORDTST%,external_payment_id.like.pending:%")
+          .maybeSingle()
+      : await baseLatestQuery
+          .not("external_payment_id", "like", TEST_ORDER_PATTERN)
+          .maybeSingle();
 
     if (latestQuery.error) throw latestQuery.error;
     if (!latestQuery.data) {
