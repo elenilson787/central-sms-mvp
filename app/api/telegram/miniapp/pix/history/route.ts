@@ -1,13 +1,11 @@
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
+import { currentPaymentEnvironment } from "@/src/payments/environment";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
 
-const TEST_ORDER_PATTERN = "ORDTST%";
-
 type PaymentRow = {
   id: string;
-  external_payment_id: string;
   status: string;
   amount_cents: number;
   created_at: string;
@@ -39,23 +37,22 @@ export async function POST(request: Request) {
     const validated = await validateTelegramMiniAppInitData(body.initData ?? "", env.telegramBotToken, { maxAgeSeconds: 3600 });
     const session = await getOrCreateMiniAppSession(validated.user);
     const supabase = getSupabaseAdmin();
+    const environment = currentPaymentEnvironment();
 
-    const baseQuery = supabase
+    const result = await supabase
       .from("payments")
-      .select("id,external_payment_id,status,amount_cents,created_at,paid_at")
+      .select("id,status,amount_cents,created_at,paid_at")
       .eq("user_id", session.user.id)
       .eq("provider", "mercado_pago_orders")
+      .eq("environment", environment)
       .order("created_at", { ascending: false })
       .limit(8);
-
-    const result = env.mercadoPagoTestMode
-      ? await baseQuery.or("external_payment_id.like.ORDTST%,external_payment_id.like.pending:%")
-      : await baseQuery.not("external_payment_id", "like", TEST_ORDER_PATTERN);
 
     if (result.error) throw result.error;
 
     return Response.json({
       ok: true,
+      environment,
       payments: ((result.data ?? []) as PaymentRow[]).map(toClientPayment),
     });
   } catch (error) {
