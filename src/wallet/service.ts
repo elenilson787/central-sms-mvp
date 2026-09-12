@@ -26,6 +26,25 @@ export async function applyWalletTransaction(input: {
     p_reference_id: input.referenceId,
     p_metadata: input.metadata ?? {},
   });
-  if (error) throw error;
-  return data;
+
+  if (!error) return data;
+
+  // Two independent confirmation paths (for example webhook + Mini App polling)
+  // can race on the same deterministic reference. Postgres rolls back the
+  // losing RPC on the unique violation, so treating the already-existing
+  // ledger row as success is safe and keeps callbacks idempotent.
+  if (error.code === "23505") {
+    const existing = await supabase
+      .from("wallet_transactions")
+      .select("id,balance_before_cents,balance_after_cents")
+      .eq("user_id", input.userId)
+      .eq("type", input.type)
+      .eq("reference_id", input.referenceId)
+      .maybeSingle();
+
+    if (existing.error) throw existing.error;
+    if (existing.data) return [existing.data];
+  }
+
+  throw error;
 }
