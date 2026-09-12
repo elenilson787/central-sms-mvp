@@ -14,6 +14,11 @@ function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function safeProviderDetail(message: string) {
+  if (!env.mercadoPagoTestMode) return undefined;
+  return message.startsWith("MERCADO_PAGO_API_ERROR:") ? message : undefined;
+}
+
 export async function POST(request: Request) {
   if (!env.pixEnabled) return Response.json({ error: "PIX_DISABLED" }, { status: 503 });
   if (!env.mercadoPagoAccessToken || !env.mercadoPagoWebhookSecret) {
@@ -123,6 +128,6 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
     console.error("[miniapp-pix-create] failed", { message });
-    return Response.json({ error: "PIX_CREATE_FAILED" }, { status: 502 });
+    return Response.json({ error: "PIX_CREATE_FAILED", detail: safeProviderDetail(message) }, { status: 502 });
   }
 }
