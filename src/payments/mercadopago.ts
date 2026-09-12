@@ -11,20 +11,33 @@ type PixInput = {
   idempotencyKey: string;
 };
 
-type MercadoPagoPayment = {
-  id?: string | number;
+type MercadoPagoOrderPayment = {
+  id?: string;
   status?: string;
   status_detail?: string;
+  amount?: string | number;
+  paid_amount?: string | number;
+  payment_method?: {
+    id?: string;
+    type?: string;
+    ticket_url?: string;
+    qr_code?: string;
+    qr_code_base64?: string;
+  };
+};
+
+export type MercadoPagoOrder = {
+  id?: string;
+  type?: string;
+  processing_mode?: string;
   external_reference?: string;
-  transaction_amount?: number;
-  currency_id?: string;
-  payment_method_id?: string;
-  point_of_interaction?: {
-    transaction_data?: {
-      qr_code?: string;
-      qr_code_base64?: string;
-      ticket_url?: string;
-    };
+  total_amount?: string | number;
+  total_paid_amount?: string | number;
+  country_code?: string;
+  status?: string;
+  status_detail?: string;
+  transactions?: {
+    payments?: MercadoPagoOrderPayment[];
   };
 };
 
@@ -38,16 +51,18 @@ function requireAccessToken() {
 async function parseResponse(response: Response): Promise<Record<string, any>> {
   const payload = await response.json().catch(() => ({})) as Record<string, any>;
   if (!response.ok) {
-    const code = payload?.cause?.[0]?.code ?? payload?.error ?? response.status;
-    const message = payload?.message ?? payload?.error ?? "Mercado Pago request failed";
-    throw new Error(`MERCADO_PAGO_API_ERROR:${code}:${String(message)}`);
+    const firstError = Array.isArray(payload?.errors) ? payload.errors[0] : undefined;
+    const code = firstError?.code ?? payload?.cause?.[0]?.code ?? payload?.error ?? response.status;
+    const message = firstError?.message ?? payload?.message ?? payload?.error ?? "Mercado Pago request failed";
+    throw new Error(`MERCADO_PAGO_API_ERROR:${String(code)}:${String(message)}`);
   }
   return payload;
 }
 
-export async function createPixPayment(input: PixInput): Promise<MercadoPagoPayment> {
+export async function createPixOrder(input: PixInput): Promise<MercadoPagoOrder> {
   const token = requireAccessToken();
-  const response = await fetch(`${API_BASE}/v1/payments`, {
+  const amount = (input.amountCents / 100).toFixed(2);
+  const response = await fetch(`${API_BASE}/v1/orders`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
@@ -56,10 +71,23 @@ export async function createPixPayment(input: PixInput): Promise<MercadoPagoPaym
       "x-idempotency-key": input.idempotencyKey,
     },
     body: JSON.stringify({
-      transaction_amount: input.amountCents / 100,
-      description: input.description,
-      payment_method_id: "pix",
+      type: "online",
+      total_amount: amount,
       external_reference: input.externalReference,
+      processing_mode: "automatic",
+      description: input.description,
+      transactions: {
+        payments: [
+          {
+            amount,
+            payment_method: {
+              id: "pix",
+              type: "bank_transfer",
+            },
+            expiration_time: "PT24H",
+          },
+        ],
+      },
       payer: {
         email: input.payerEmail,
         identification: {
@@ -69,18 +97,52 @@ export async function createPixPayment(input: PixInput): Promise<MercadoPagoPaym
       },
     }),
   });
-  return await parseResponse(response) as MercadoPagoPayment;
+  return await parseResponse(response) as MercadoPagoOrder;
 }
 
-export async function getPayment(paymentId: string): Promise<MercadoPagoPayment> {
+export async function getOrder(orderId: string): Promise<MercadoPagoOrder> {
   const token = requireAccessToken();
-  const response = await fetch(`${API_BASE}/v1/payments/${encodeURIComponent(paymentId)}`, {
+  const response = await fetch(`${API_BASE}/v1/orders/${encodeURIComponent(orderId)}`, {
     headers: {
       authorization: `Bearer ${token}`,
       accept: "application/json",
     },
   });
-  return await parseResponse(response) as MercadoPagoPayment;
+  return await parseResponse(response) as MercadoPagoOrder;
+}
+
+export function primaryOrderPayment(order: MercadoPagoOrder): MercadoPagoOrderPayment | undefined {
+  return order.transactions?.payments?.[0];
+}
+
+export function orderPixData(order: MercadoPagoOrder) {
+  const paymentMethod = primaryOrderPayment(order)?.payment_method;
+  return {
+    qrCode: paymentMethod?.qr_code ?? null,
+    qrCodeBase64: paymentMethod?.qr_code_base64 ?? null,
+    ticketUrl: paymentMethod?.ticket_url ?? null,
+  };
+}
+
+export function orderAmountCents(order: MercadoPagoOrder) {
+  return Math.round(Number(order.total_amount ?? 0) * 100);
+}
+
+export function orderIsAccredited(order: MercadoPagoOrder) {
+  const payment = primaryOrderPayment(order);
+  return order.status === "processed" &&
+    order.status_detail === "accredited" &&
+    payment?.status === "processed" &&
+    payment?.status_detail === "accredited";
+}
+
+export function normalizeOrderStatus(order: MercadoPagoOrder) {
+  if (orderIsAccredited(order)) return "approved";
+  if (order.status === "action_required" || order.status === "created") return "pending";
+  if (order.status === "processing") return "in_process";
+  if (order.status === "cancelled" || order.status === "canceled" || order.status === "expired") return "cancelled";
+  if (order.status === "failed" || order.status === "rejected") return "rejected";
+  return String(order.status ?? "pending");
 }
 
 function parseSignature(header: string) {
@@ -107,8 +169,7 @@ export function verifyMercadoPagoWebhookSignature(input: {
   if (input.dataId) parts.push(`id:${input.dataId};`);
   if (input.xRequestId) parts.push(`request-id:${input.xRequestId};`);
   parts.push(`ts:${ts};`);
-  const manifest = parts.join("");
-  const expected = createHmac("sha256", secret).update(manifest).digest("hex");
+  const expected = createHmac("sha256", secret).update(parts.join("")).digest("hex");
 
   try {
     const expectedBuffer = Buffer.from(expected, "hex");
@@ -118,9 +179,3 @@ export function verifyMercadoPagoWebhookSignature(input: {
     return false;
   }
 }
-
-export function paymentAmountCents(payment: MercadoPagoPayment) {
-  return Math.round(Number(payment.transaction_amount ?? 0) * 100);
-}
-
-export type { MercadoPagoPayment };

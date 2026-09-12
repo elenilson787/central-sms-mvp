@@ -1,6 +1,6 @@
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
-import { reconcileMercadoPagoPayment } from "@/src/payments/reconcile";
+import { reconcileMercadoPagoOrder } from "@/src/payments/reconcile";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
 
@@ -29,12 +29,12 @@ export async function POST(request: Request) {
     if (localQuery.error) throw localQuery.error;
     if (!localQuery.data) return Response.json({ error: "PAYMENT_NOT_FOUND" }, { status: 404 });
 
-    const externalPaymentId = String(localQuery.data.external_payment_id);
-    if (externalPaymentId.startsWith("pending:")) {
+    const externalOrderId = String(localQuery.data.external_payment_id);
+    if (externalOrderId.startsWith("pending:")) {
       return Response.json({ ok: true, status: String(localQuery.data.status), credited: false, walletBalanceCents: session.wallet.balanceCents });
     }
 
-    const reconciliation = await reconcileMercadoPagoPayment(externalPaymentId);
+    const reconciliation = await reconcileMercadoPagoOrder(externalOrderId);
     const refreshedSession = await getOrCreateMiniAppSession(validated.user);
     return Response.json({
       ok: true,

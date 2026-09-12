@@ -39,27 +39,36 @@ test("Telegram webhook remains protected by secret token", async () => {
   assert.match(webhook, /telegramWebhookSecret/);
 });
 
-test("Mercado Pago webhook validates signature and reconciles server-side payment", async () => {
+test("Mercado Pago PIX uses Orders API with idempotency and signed order webhooks", async () => {
   const gateway = await readFile(new URL("../src/payments/mercadopago.ts", import.meta.url), "utf8");
   const webhook = await readFile(new URL("../app/api/webhooks/mercadopago/route.ts", import.meta.url), "utf8");
   const reconcile = await readFile(new URL("../src/payments/reconcile.ts", import.meta.url), "utf8");
+  assert.match(gateway, /\/v1\/orders/);
+  assert.doesNotMatch(gateway, /\/v1\/payments/);
+  assert.match(gateway, /processing_mode: "automatic"/);
+  assert.match(gateway, /id: "pix"/);
+  assert.match(gateway, /type: "bank_transfer"/);
   assert.match(gateway, /x-idempotency-key/);
   assert.match(gateway, /createHmac\("sha256"/);
   assert.match(gateway, /timingSafeEqual/);
   assert.match(webhook, /verifyMercadoPagoWebhookSignature/);
-  assert.match(webhook, /reconcileMercadoPagoPayment/);
+  assert.match(webhook, /notificationType !== "order"/);
+  assert.match(webhook, /reconcileMercadoPagoOrder/);
   assert.match(reconcile, /PAYMENT_INTEGRITY_MISMATCH/);
-  assert.match(reconcile, /payment_method_id/);
-  assert.match(reconcile, /currency_id/);
+  assert.match(reconcile, /payment_method\?\.id === "pix"/);
+  assert.match(reconcile, /payment_method\?\.type === "bank_transfer"/);
+  assert.match(reconcile, /orderIsAccredited/);
   assert.match(reconcile, /referenceId: `payment:\$\{local\.id\}:credit`/);
 });
 
 test("PIX payer PII is not inserted into local payments table", async () => {
   const pixRoute = await readFile(new URL("../app/api/telegram/miniapp/pix/route.ts", import.meta.url), "utf8");
-  const insertBlock = pixRoute.slice(pixRoute.indexOf('from("payments").insert'), pixRoute.indexOf("const payment = await createPixPayment"));
+  const insertStart = pixRoute.indexOf('from("payments").insert');
+  const gatewayCall = pixRoute.indexOf("const order = await createPixOrder");
+  const insertBlock = pixRoute.slice(insertStart, gatewayCall);
   assert.doesNotMatch(insertBlock, /payerEmail/);
   assert.doesNotMatch(insertBlock, /documentNumber/);
-  assert.match(pixRoute, /createPixPayment/);
+  assert.match(pixRoute, /createPixOrder/);
 });
 
 test("preview catalog cannot execute provider purchases", async () => {
