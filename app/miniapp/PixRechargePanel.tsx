@@ -37,6 +37,7 @@ function userFriendlyError(code?: string) {
     PIX_DISABLED: "O PIX ainda não foi habilitado pelo administrador.",
     PIX_GATEWAY_NOT_CONFIGURED: "As credenciais do Mercado Pago ainda não foram configuradas.",
     PIX_AMOUNT_OUT_OF_RANGE: "O valor da recarga está fora dos limites permitidos.",
+    PIX_TEST_AMOUNT_REQUIRED: "No modo de teste do Mercado Pago, use exatamente R$ 50,00.",
     INVALID_PAYER_DATA: "Confira o e-mail e o CPF/CNPJ informado.",
     RATE_LIMITED: "Muitas tentativas em pouco tempo. Aguarde alguns minutos.",
     PIX_CREATE_FAILED: "Não foi possível gerar a cobrança PIX agora.",
@@ -80,13 +81,16 @@ export default function PixRechargePanel({ onBalanceUpdated }: Props) {
           documentNumber,
         }),
       });
-      const payload = await response.json() as { payment?: PixPayment; error?: string };
-      if (!response.ok || !payload.payment) throw new Error(payload.error ?? "PIX_CREATE_FAILED");
+      const payload = await response.json() as { payment?: PixPayment; error?: string; detail?: string };
+      if (!response.ok || !payload.payment) {
+        const friendly = userFriendlyError(payload.error ?? "PIX_CREATE_FAILED");
+        throw new Error(payload.detail ? `${friendly}\n${payload.detail}` : friendly);
+      }
       setPayment(payload.payment);
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
     } catch (cause) {
-      const code = cause instanceof Error ? cause.message : "PIX_CREATE_FAILED";
-      setError(userFriendlyError(code));
+      const message = cause instanceof Error ? cause.message : userFriendlyError("PIX_CREATE_FAILED");
+      setError(message);
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("error");
     } finally {
       setLoading(false);
