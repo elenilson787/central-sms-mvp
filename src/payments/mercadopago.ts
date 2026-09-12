@@ -62,6 +62,19 @@ async function parseResponse(response: Response): Promise<Record<string, any>> {
 export async function createPixOrder(input: PixInput): Promise<MercadoPagoOrder> {
   const token = requireAccessToken();
   const amount = (input.amountCents / 100).toFixed(2);
+  const payer = env.mercadoPagoTestMode
+    ? {
+        email: "test_user_br@testuser.com",
+        first_name: "APRO",
+      }
+    : {
+        email: input.payerEmail,
+        identification: {
+          type: input.documentType,
+          number: input.documentNumber,
+        },
+      };
+
   const response = await fetch(`${API_BASE}/v1/orders`, {
     method: "POST",
     headers: {
@@ -88,13 +101,7 @@ export async function createPixOrder(input: PixInput): Promise<MercadoPagoOrder>
           },
         ],
       },
-      payer: {
-        email: input.payerEmail,
-        identification: {
-          type: input.documentType,
-          number: input.documentNumber,
-        },
-      },
+      payer,
     }),
   });
   return await parseResponse(response) as MercadoPagoOrder;
