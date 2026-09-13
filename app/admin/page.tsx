@@ -25,6 +25,8 @@ type AdminUser = {
   recentActivations?: Array<{ id: string; provider: string; country: string; product: string; status: string; created_at: string }>;
 };
 
+type PaymentFilter = "production" | "test" | "all";
+
 function money(cents?: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(cents ?? 0) / 100);
 }
@@ -37,6 +39,7 @@ export default function AdminPage() {
   const [token, setToken] = useState("");
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("production");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,26 +110,34 @@ export default function AdminPage() {
       {error && <div className={styles.error}>{error}</div>}
     </section>
 
-    {users.map((user) => <section className={styles.card} key={user.id}>
-      <div className={styles.grid}>
-        <div><strong>{user.first_name ?? "Usuário"} {user.last_name ?? ""}</strong><br /><span className={styles.muted}>@{user.username ?? "sem_username"}</span></div>
-        <div><strong>Telegram</strong><br />{user.telegram_user_id}</div>
-        <div><strong>Saldo</strong><br />{money(user.wallet?.balance_cents)}</div>
-        <div><strong>Status</strong><br /><span className={styles.badge}>{user.status}</span></div>
-      </div>
+    {users.map((user) => {
+      const visiblePayments = (user.recentPayments ?? []).filter((payment) => paymentFilter === "all" || payment.environment === paymentFilter);
+      return <section className={styles.card} key={user.id}>
+        <div className={styles.grid}>
+          <div><strong>{user.first_name ?? "Usuário"} {user.last_name ?? ""}</strong><br /><span className={styles.muted}>@{user.username ?? "sem_username"}</span></div>
+          <div><strong>Telegram</strong><br />{user.telegram_user_id}</div>
+          <div><strong>Saldo</strong><br />{money(user.wallet?.balance_cents)}</div>
+          <div><strong>Status</strong><br /><span className={styles.badge}>{user.status}</span></div>
+        </div>
 
-      <h3>Recargas recentes</h3>
-      <table className={styles.table}><thead><tr><th>Valor</th><th>Ambiente</th><th>Status</th><th>Data</th><th>Ação</th></tr></thead><tbody>
-        {(user.recentPayments ?? []).map((payment) => <tr key={payment.id}>
-          <td>{money(payment.amount_cents)}</td><td>{payment.environment}</td><td>{payment.status}</td><td>{date(payment.paid_at ?? payment.created_at)}</td>
-          <td>{payment.environment === "production" && payment.status === "approved" ? <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => void refund(payment)}>Reembolsar</button> : "—"}</td>
-        </tr>)}
-      </tbody></table>
+        <div className={styles.row}>
+          <h3 style={{ marginRight: "auto" }}>Recargas recentes</h3>
+          <button className={styles.button} disabled={paymentFilter === "production"} onClick={() => setPaymentFilter("production")}>Produção</button>
+          <button className={styles.button} disabled={paymentFilter === "test"} onClick={() => setPaymentFilter("test")}>Teste</button>
+          <button className={styles.button} disabled={paymentFilter === "all"} onClick={() => setPaymentFilter("all")}>Todos</button>
+        </div>
+        <table className={styles.table}><thead><tr><th>Valor</th><th>Ambiente</th><th>Status</th><th>Data</th><th>Ação</th></tr></thead><tbody>
+          {visiblePayments.length ? visiblePayments.map((payment) => <tr key={payment.id}>
+            <td>{money(payment.amount_cents)}</td><td>{payment.environment}</td><td>{payment.status}</td><td>{date(payment.paid_at ?? payment.created_at)}</td>
+            <td>{payment.environment === "production" && payment.status === "approved" ? <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => void refund(payment)}>Reembolsar</button> : "—"}</td>
+          </tr>) : <tr><td colSpan={5} className={styles.muted}>Nenhuma recarga neste ambiente.</td></tr>}
+        </tbody></table>
 
-      <h3>Ativações recentes</h3>
-      <table className={styles.table}><thead><tr><th>Serviço</th><th>País</th><th>Status</th><th>Data</th></tr></thead><tbody>
-        {(user.recentActivations ?? []).map((activation) => <tr key={activation.id}><td>{activation.product}</td><td>{activation.country}</td><td>{activation.status}</td><td>{date(activation.created_at)}</td></tr>)}
-      </tbody></table>
-    </section>)}
+        <h3>Ativações recentes</h3>
+        <table className={styles.table}><thead><tr><th>Serviço</th><th>País</th><th>Status</th><th>Data</th></tr></thead><tbody>
+          {(user.recentActivations ?? []).map((activation) => <tr key={activation.id}><td>{activation.product}</td><td>{activation.country}</td><td>{activation.status}</td><td>{date(activation.created_at)}</td></tr>)}
+        </tbody></table>
+      </section>;
+    })}
   </div></main>;
 }
