@@ -71,6 +71,7 @@ export default function SmsPoolCatalogPanel() {
   const [selectedOffer, setSelectedOffer] = useState<CatalogOffer | null>(null);
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [reviewingPurchase, setReviewingPurchase] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
 
   const loadCatalog = useCallback(async (countrySelector: string) => {
@@ -110,18 +111,22 @@ export default function SmsPoolCatalogPanel() {
     return offers.filter((offer) => `${offer.label} ${offer.countryName}`.toLocaleLowerCase("pt-BR").includes(query));
   }, [offers, searchQuery]);
 
-  function selectMode(next: "one-time" | "rental") {
-    setMode(next);
+  function closeQuote() {
     setSelectedOffer(null);
     setQuote(null);
+    setReviewingPurchase(false);
+  }
+
+  function selectMode(next: "one-time" | "rental") {
+    setMode(next);
+    closeQuote();
     window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
     window.setTimeout(() => flowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   }
 
   async function changeCountry(value: string) {
     setCountry(value);
-    setSelectedOffer(null);
-    setQuote(null);
+    closeQuote();
     await loadCatalog(value);
   }
 
@@ -130,6 +135,7 @@ export default function SmsPoolCatalogPanel() {
     if (!webApp?.initData) return;
     setSelectedOffer(offer);
     setQuote(null);
+    setReviewingPurchase(false);
     setQuoteLoading(true);
     try {
       const response = await fetch("/api/telegram/miniapp/catalog/quote", {
@@ -143,12 +149,23 @@ export default function SmsPoolCatalogPanel() {
       }
       setQuote(payload as QuotePayload);
     } catch (cause) {
-      setSelectedOffer(null);
+      closeQuote();
       popup("Não foi possível consultar", cause instanceof Error ? cause.message : "Falha ao consultar disponibilidade.");
     } finally {
       setQuoteLoading(false);
     }
   }
+
+  const quotedPrice = quote?.price.salePriceCents ?? null;
+  const canReviewPurchase = Boolean(
+    quote
+    && quote.availability.stock > 0
+    && quotedPrice !== null
+    && quote.canAfford === true,
+  );
+  const balanceAfterPurchase = quote && quotedPrice !== null
+    ? quote.walletBalanceCents - quotedPrice
+    : null;
 
   return <section className={styles.catalogSection}>
     <div className={styles.offerList}>
@@ -257,18 +274,23 @@ export default function SmsPoolCatalogPanel() {
           </div>
         </>}
 
-        {selectedOffer && <div className={styles.modalBackdrop} role="presentation" onClick={() => { setSelectedOffer(null); setQuote(null); }}>
+        {selectedOffer && <div className={styles.modalBackdrop} role="presentation" onClick={closeQuote}>
           <section className={styles.modal} role="dialog" aria-modal="true" aria-label={`Número para ${selectedOffer.label}`} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHandle} />
             <div className={styles.modalHeader}>
-              <div><span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
-              <button className={styles.close} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>×</button>
+              <div>
+                <span className={styles.demoBadge}>{reviewingPurchase ? "REVISÃO DO PEDIDO" : "ATIVAÇÃO ÚNICA"}</span>
+                <h2>{reviewingPurchase ? "Revise seu pedido" : `Número para ${selectedOffer.label}`}</h2>
+                <p>{selectedOffer.countryName} · SMS de verificação</p>
+              </div>
+              <button className={styles.close} type="button" onClick={closeQuote}>×</button>
             </div>
 
             {quoteLoading && <div className={styles.loading}>Consultando preço final e disponibilidade…</div>}
-            {quote && <>
+
+            {quote && !reviewingPurchase && <>
               <div className={styles.quoteRows}>
-                <div className={styles.quoteTotal}><span>Preço final</span><strong>{quote.price.salePriceCents !== null ? formatMoney(quote.price.salePriceCents) : "Preço em configuração"}</strong></div>
+                <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "Preço em configuração"}</strong></div>
                 <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
                 <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
                 <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
@@ -278,6 +300,10 @@ export default function SmsPoolCatalogPanel() {
                 {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
               </div>
 
+              {quotedPrice !== null && quote.canAfford === false && <div className={styles.warnNotice}>
+                <strong>Saldo insuficiente.</strong> Recarregue sua carteira antes de concluir esta compra.
+              </div>}
+
               <div className={styles.warnNotice}>
                 Este número é de ativação temporária. Depois que o pedido expirar, ele não fica reservado para você. Se precisar receber outro código no futuro, prefira a modalidade de aluguel longo.
               </div>
@@ -285,10 +311,58 @@ export default function SmsPoolCatalogPanel() {
               <p className={styles.modalText}>
                 Quando a compra estiver liberada, você receberá um número para usar no {selectedOffer.label} e acompanhará o código SMS dentro da Central SMS.
               </p>
-              <button className={styles.primaryButton} type="button" disabled>
-                Compra ainda bloqueada
+
+              <button
+                className={styles.primaryButton}
+                type="button"
+                disabled={!canReviewPurchase}
+                onClick={() => {
+                  window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
+                  setReviewingPurchase(true);
+                }}
+              >
+                {quote.availability.stock <= 0
+                  ? "Sem estoque neste momento"
+                  : quotedPrice === null
+                    ? "Preço ainda em configuração"
+                    : quote.canAfford === false
+                      ? "Saldo insuficiente"
+                      : "Continuar para revisão"}
               </button>
-              <button className={styles.secondaryButton} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>Fechar</button>
+              <button className={styles.secondaryButton} type="button" onClick={closeQuote}>Fechar</button>
+            </>}
+
+            {quote && reviewingPurchase && <>
+              <div className={styles.catalogGuide}>
+                <div className={styles.guideIcon}>🧾</div>
+                <div>
+                  <strong>Confira antes de confirmar</strong>
+                  <p>Nenhuma compra será feita nesta tela enquanto a operação comercial estiver bloqueada.</p>
+                </div>
+              </div>
+
+              <div className={styles.quoteRows}>
+                <div><span>Produto</span><strong>Número para {selectedOffer.label}</strong></div>
+                <div><span>País do número</span><strong>{selectedOffer.countryName}</strong></div>
+                <div><span>Tipo</span><strong>Ativação única</strong></div>
+                <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "—"}</strong></div>
+                <div><span>Saldo atual</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
+                <div><span>Saldo após a compra</span><strong>{balanceAfterPurchase !== null ? formatMoney(balanceAfterPurchase) : "—"}</strong></div>
+              </div>
+
+              <div className={styles.warnNotice}>
+                <strong>Importante:</strong> esta compra entregará um número temporário para receber o SMS do {selectedOffer.label}. O número não será seu de forma permanente e pode não aceitar novos códigos depois que a ativação expirar.
+              </div>
+
+              <div className={styles.okNotice}>
+                Quando a venda for liberada, o preço e o estoque serão conferidos novamente no servidor antes do débito. Se o valor do fornecedor mudar, a compra não será executada silenciosamente por um preço maior.
+              </div>
+
+              <button className={styles.primaryButton} type="button" disabled>
+                Confirmar compra — aguardando liberação
+              </button>
+              <button className={styles.secondaryButton} type="button" onClick={() => setReviewingPurchase(false)}>Voltar</button>
+              <button className={styles.secondaryButton} type="button" onClick={closeQuote}>Fechar</button>
             </>}
           </section>
         </div>}

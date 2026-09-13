@@ -95,7 +95,7 @@ test("live catalog cannot execute provider purchases", async () => {
   const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
 
   assert.match(page, /SmsPoolCatalogPanel/);
-  assert.match(panel, /Compra ainda bloqueada/);
+  assert.match(panel, /Confirmar compra — aguardando liberação/);
   assert.match(panel, /Quando a compra estiver liberada/);
   assert.match(catalogRoute, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
