@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import SmsPoolRentalPanel from "./SmsPoolRentalPanel";
 import styles from "./page.module.css";
 
 type CatalogCountry = {
@@ -59,6 +60,7 @@ function popup(title: string, message: string) {
 }
 
 export default function SmsPoolCatalogPanel() {
+  const [mode, setMode] = useState<"one-time" | "rental">("one-time");
   const [countries, setCountries] = useState<CatalogCountry[]>([]);
   const [country, setCountry] = useState("BR");
   const [offers, setOffers] = useState<CatalogOffer[]>([]);
@@ -144,7 +146,7 @@ export default function SmsPoolCatalogPanel() {
       <article className={styles.offerCard}>
         <div className={styles.offerTop}>
           <div>
-            <span className={styles.demoBadge}>DISPONÍVEL</span>
+            <span className={mode === "one-time" ? styles.demoBadge : styles.badge}>ATIVAÇÃO ÚNICA</span>
             <h3>⚡ Ativação única</h3>
             <p>Receba um código SMS agora</p>
           </div>
@@ -152,130 +154,134 @@ export default function SmsPoolCatalogPanel() {
         <p className={styles.offerDescription}>
           Ideal quando você precisa receber um código de verificação uma única vez. O número é temporário e não fica reservado permanentemente para você.
         </p>
+        <button className={mode === "one-time" ? styles.primaryButton : styles.secondaryButton} type="button" onClick={() => setMode("one-time")}>Usar ativação única</button>
       </article>
 
       <article className={styles.offerCard}>
         <div className={styles.offerTop}>
           <div>
-            <span className={styles.badge}>EM INTEGRAÇÃO</span>
+            <span className={mode === "rental" ? styles.demoBadge : styles.badge}>CATÁLOGO REAL</span>
             <h3>🗓️ Manter número por mais tempo</h3>
-            <p>Para receber códigos futuros e manter acesso ao mesmo número</p>
+            <p>Mesmo número por vários dias</p>
           </div>
         </div>
         <p className={styles.offerDescription}>
-          Indicado para contas que podem pedir nova verificação, recuperação de acesso ou login em outro aparelho. O catálogo de aluguel longo será conectado separadamente.
+          Indicado para contas que podem pedir nova verificação, recuperação de acesso ou login em outro aparelho. Períodos, serviços, preço e estoque são consultados no catálogo de aluguel longo.
         </p>
+        <button className={mode === "rental" ? styles.primaryButton : styles.secondaryButton} type="button" onClick={() => setMode("rental")}>Ver aluguel longo</button>
       </article>
     </div>
 
-    <div className={styles.warnNotice}>
-      <strong>Atenção sobre ativação única:</strong> depois que o pedido expirar, você pode perder o acesso ao número. Se o app pedir outro código no futuro, talvez não seja possível recebê-lo. Para contas que você pretende manter, prefira aluguel longo quando essa opção estiver disponível.
-    </div>
-
-    <div className={styles.catalogGuide}>
-      <div className={styles.guideIcon}>🔎</div>
-      <div>
-        <strong>Para qual app ou site você precisa de um número?</strong>
-        <p>Digite o nome do serviço que vai enviar o código por SMS. Ex.: procure por <b>YouTube</b> para encontrar um número para verificação do YouTube.</p>
-      </div>
-    </div>
-
-    <div className={styles.filters}>
-      <label className={styles.fieldLabel} htmlFor="service-search">Serviço que você quer ativar</label>
-      <input
-        id="service-search"
-        className={styles.input}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Ex.: YouTube, Discord, Steam"
-        autoComplete="off"
-      />
-      <div className={styles.quickSearches} aria-label="Buscas rápidas">
-        <span>Exemplos:</span>
-        {QUICK_SEARCHES.map((item) => <button key={item} className={styles.quickSearchButton} type="button" onClick={() => setSearch(item)}>{item}</button>)}
+    {mode === "rental" ? <SmsPoolRentalPanel /> : <>
+      <div className={styles.warnNotice}>
+        <strong>Atenção sobre ativação única:</strong> depois que o pedido expirar, você pode perder o acesso ao número. Se o app pedir outro código no futuro, talvez não seja possível recebê-lo. Para contas que você pretende manter, prefira aluguel longo.
       </div>
 
-      <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
-      <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
-        {countries.map((item) => <option key={item.id} value={item.code || item.id}>{item.name} {item.code ? `(${item.code})` : ""}</option>)}
-      </select>
-      <span className={styles.helperText}>O país define de onde será o número que receberá o SMS.</span>
-    </div>
-
-    {!pricingConfigured && !loading && <div className={styles.warnNotice}>
-      Os preços finais em reais estão sendo configurados. O catálogo e a disponibilidade já podem ser consultados normalmente.
-    </div>}
-
-    {loading && <div className={styles.loading}>Carregando serviços disponíveis…</div>}
-    {error && <div className={styles.error}>{error}</div>}
-
-    {!loading && !error && searchQuery.length < 2 && <div className={styles.searchPrompt}>
-      <strong>Comece digitando o nome do app ou site</strong>
-      <span>Por exemplo: “YouTube”. Você verá apenas as opções correspondentes, em vez de navegar por centenas de serviços.</span>
-    </div>}
-
-    {!loading && !error && searchQuery.length >= 2 && <>
-      <div className={styles.resultsHeader}>
-        <strong>{filteredOffers.length} {filteredOffers.length === 1 ? "opção encontrada" : "opções encontradas"}</strong>
-        <span>para “{searchQuery}”</span>
+      <div className={styles.catalogGuide}>
+        <div className={styles.guideIcon}>🔎</div>
+        <div>
+          <strong>Para qual app ou site você precisa de um número?</strong>
+          <p>Digite o nome do serviço que vai enviar o código por SMS. Ex.: procure por <b>YouTube</b> para encontrar um número para verificação do YouTube.</p>
+        </div>
       </div>
-      <div className={styles.offerList}>
-        {!filteredOffers.length && <div className={styles.empty}>Não encontramos esse serviço neste país. Confira a escrita ou tente outro país.</div>}
-        {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
-          <div className={styles.offerTop}>
-            <div>
-              <span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span>
-              <h3>Número para {offer.label}</h3>
-              <p>{offer.countryName} · SMS de verificação</p>
-            </div>
-            <div className={styles.offerPrice}>
-              {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
-            </div>
-          </div>
-          <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra e não deve ser tratado como um número permanente.</p>
-          <div className={styles.offerMeta}>
-            <span>País: {offer.countryName}</span>
-            <span>Disponibilidade: consultar</span>
-          </div>
-          <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver disponibilidade para {offer.label}</button>
-        </article>)}
-      </div>
-    </>}
 
-    {selectedOffer && <div className={styles.modalBackdrop} role="presentation" onClick={() => { setSelectedOffer(null); setQuote(null); }}>
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label={`Número para ${selectedOffer.label}`} onClick={(event) => event.stopPropagation()}>
-        <div className={styles.modalHandle} />
-        <div className={styles.modalHeader}>
-          <div><span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
-          <button className={styles.close} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>×</button>
+      <div className={styles.filters}>
+        <label className={styles.fieldLabel} htmlFor="service-search">Serviço que você quer ativar</label>
+        <input
+          id="service-search"
+          className={styles.input}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Ex.: YouTube, Discord, Steam"
+          autoComplete="off"
+        />
+        <div className={styles.quickSearches} aria-label="Buscas rápidas">
+          <span>Exemplos:</span>
+          {QUICK_SEARCHES.map((item) => <button key={item} className={styles.quickSearchButton} type="button" onClick={() => setSearch(item)}>{item}</button>)}
         </div>
 
-        {quoteLoading && <div className={styles.loading}>Consultando preço final e disponibilidade…</div>}
-        {quote && <>
-          <div className={styles.quoteRows}>
-            <div className={styles.quoteTotal}><span>Preço final</span><strong>{quote.price.salePriceCents !== null ? formatMoney(quote.price.salePriceCents) : "Preço em configuração"}</strong></div>
-            <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
-            <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
-            <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
+        <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
+        <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
+          {countries.map((item) => <option key={item.id} value={item.code || item.id}>{item.name} {item.code ? `(${item.code})` : ""}</option>)}
+        </select>
+        <span className={styles.helperText}>O país define de onde será o número que receberá o SMS.</span>
+      </div>
+
+      {!pricingConfigured && !loading && <div className={styles.warnNotice}>
+        Os preços finais em reais estão sendo configurados. O catálogo e a disponibilidade já podem ser consultados normalmente.
+      </div>}
+
+      {loading && <div className={styles.loading}>Carregando serviços disponíveis…</div>}
+      {error && <div className={styles.error}>{error}</div>}
+
+      {!loading && !error && searchQuery.length < 2 && <div className={styles.searchPrompt}>
+        <strong>Comece digitando o nome do app ou site</strong>
+        <span>Por exemplo: “YouTube”. Você verá apenas as opções correspondentes, em vez de navegar por centenas de serviços.</span>
+      </div>}
+
+      {!loading && !error && searchQuery.length >= 2 && <>
+        <div className={styles.resultsHeader}>
+          <strong>{filteredOffers.length} {filteredOffers.length === 1 ? "opção encontrada" : "opções encontradas"}</strong>
+          <span>para “{searchQuery}”</span>
+        </div>
+        <div className={styles.offerList}>
+          {!filteredOffers.length && <div className={styles.empty}>Não encontramos esse serviço neste país. Confira a escrita ou tente outro país.</div>}
+          {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
+            <div className={styles.offerTop}>
+              <div>
+                <span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span>
+                <h3>Número para {offer.label}</h3>
+                <p>{offer.countryName} · SMS de verificação</p>
+              </div>
+              <div className={styles.offerPrice}>
+                {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
+              </div>
+            </div>
+            <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra e não deve ser tratado como um número permanente.</p>
+            <div className={styles.offerMeta}>
+              <span>País: {offer.countryName}</span>
+              <span>Disponibilidade: consultar</span>
+            </div>
+            <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver disponibilidade para {offer.label}</button>
+          </article>)}
+        </div>
+      </>}
+
+      {selectedOffer && <div className={styles.modalBackdrop} role="presentation" onClick={() => { setSelectedOffer(null); setQuote(null); }}>
+        <section className={styles.modal} role="dialog" aria-modal="true" aria-label={`Número para ${selectedOffer.label}`} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalHandle} />
+          <div className={styles.modalHeader}>
+            <div><span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
+            <button className={styles.close} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>×</button>
           </div>
 
-          <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
-            {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
-          </div>
+          {quoteLoading && <div className={styles.loading}>Consultando preço final e disponibilidade…</div>}
+          {quote && <>
+            <div className={styles.quoteRows}>
+              <div className={styles.quoteTotal}><span>Preço final</span><strong>{quote.price.salePriceCents !== null ? formatMoney(quote.price.salePriceCents) : "Preço em configuração"}</strong></div>
+              <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
+              <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
+              <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
+            </div>
 
-          <div className={styles.warnNotice}>
-            Este número é de ativação temporária. Depois que o pedido expirar, ele não fica reservado para você. Se precisar receber outro código no futuro, prefira a modalidade de aluguel longo quando disponível.
-          </div>
+            <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
+              {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
+            </div>
 
-          <p className={styles.modalText}>
-            Quando a compra estiver liberada, você receberá um número para usar no {selectedOffer.label} e acompanhará o código SMS dentro da Central SMS.
-          </p>
-          <button className={styles.primaryButton} type="button" disabled>
-            Compra ainda bloqueada
-          </button>
-          <button className={styles.secondaryButton} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>Fechar</button>
-        </>}
-      </section>
-    </div>}
+            <div className={styles.warnNotice}>
+              Este número é de ativação temporária. Depois que o pedido expirar, ele não fica reservado para você. Se precisar receber outro código no futuro, prefira a modalidade de aluguel longo.
+            </div>
+
+            <p className={styles.modalText}>
+              Quando a compra estiver liberada, você receberá um número para usar no {selectedOffer.label} e acompanhará o código SMS dentro da Central SMS.
+            </p>
+            <button className={styles.primaryButton} type="button" disabled>
+              Compra ainda bloqueada
+            </button>
+            <button className={styles.secondaryButton} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>Fechar</button>
+          </>}
+        </section>
+      </div>}
+    </>}
   </section>;
 }
