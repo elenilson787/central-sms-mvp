@@ -6,7 +6,7 @@ test("rental catalog distinguishes general rentals from service-specific rentals
   const catalog = await readFile(new URL("../src/providers/smspool/rental-catalog.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/miniapp/SmsPoolRentalPanel.tsx", import.meta.url), "utf8");
 
-  assert.match(catalog, /serviceMode: "GENERAL" \| "SERVICE_SPECIFIC"/);
+  assert.match(catalog, /SmsPoolRentalServiceMode = "GENERAL" \| "SERVICE_SPECIFIC"/);
   assert.match(catalog, /services\.length > 0 \? "SERVICE_SPECIFIC" : "GENERAL"/);
   assert.match(catalog, /SERVICE_REQUIRED_FOR_RENTAL/);
   assert.match(panel, /Aluguel geral/);
