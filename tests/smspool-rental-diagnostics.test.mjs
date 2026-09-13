@@ -9,6 +9,7 @@ test("SMSPool admin diagnostics inspect both rental catalog types without purcha
   assert.match(route, /rentalDiagnostics\(0\)/);
   assert.match(route, /rentalDiagnostics\(1\)/);
   assert.match(route, /retrieveSmsPoolRentalServices/);
-  assert.match(route, /rentalDiagnostics/);
+  assert.match(route, /NO_RENTALS_AVAILABLE/);
+  assert.match(route, /available: false/);
   assert.doesNotMatch(route, /purchaseSmsPoolNumber|\/rental\/order|purchase_rental/);
 });

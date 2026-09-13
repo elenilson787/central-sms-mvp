@@ -14,6 +14,12 @@ type RentalDiagnosticRow = {
   metadata: Record<string, string | number | boolean | null>;
 };
 
+type RentalDiagnosticGroup = {
+  available: boolean;
+  rows: RentalDiagnosticRow[];
+  error: string | null;
+};
+
 type Diagnostic = {
   ok: boolean;
   provider: string;
@@ -37,8 +43,8 @@ type Diagnostic = {
     }>;
   };
   rentalDiagnostics?: {
-    type0: RentalDiagnosticRow[];
-    type1: RentalDiagnosticRow[];
+    type0: RentalDiagnosticGroup;
+    type1: RentalDiagnosticGroup;
   };
   safety?: {
     purchasesEnabled: boolean;
@@ -53,10 +59,16 @@ function money(value: number | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
 }
 
-function RentalTable({ title, rows }: { title: string; rows: RentalDiagnosticRow[] }) {
+function RentalTable({ title, group }: { title: string; group?: RentalDiagnosticGroup }) {
+  const rows = group?.rows ?? [];
   return <>
     <h3>{title}</h3>
-    <table className={styles.table}><thead><tr><th>ID</th><th>Nome</th><th>Região</th><th>Serviços</th><th>Amostra</th><th>Metadados</th></tr></thead><tbody>
+    {!group?.available && <div className={styles.muted}>
+      {group?.error === "NO_RENTALS_AVAILABLE"
+        ? "Nenhum aluguel disponível para este tipo na conta/provedor neste momento."
+        : `Não foi possível consultar este tipo: ${group?.error ?? "sem resposta"}`}
+    </div>}
+    {group?.available && <table className={styles.table}><thead><tr><th>ID</th><th>Nome</th><th>Região</th><th>Serviços</th><th>Amostra</th><th>Metadados</th></tr></thead><tbody>
       {rows.map((row) => <tr key={`${row.queryType}-${row.id}`}>
         <td>{row.id}</td>
         <td>{row.name}</td>
@@ -65,8 +77,8 @@ function RentalTable({ title, rows }: { title: string; rows: RentalDiagnosticRow
         <td>{row.sampleServices.length ? row.sampleServices.join(", ") : row.servicesError ? row.servicesError : "—"}</td>
         <td><code>{JSON.stringify(row.metadata)}</code></td>
       </tr>)}
-      {!rows.length && <tr><td colSpan={6} className={styles.muted}>Nenhuma opção retornada.</td></tr>}
-    </tbody></table>
+      {!rows.length && <tr><td colSpan={6} className={styles.muted}>Este tipo respondeu, mas não retornou opções.</td></tr>}
+    </tbody></table>}
   </>;
 }
 
@@ -140,9 +152,9 @@ export default function SmsPoolAdminPage() {
 
       <section className={styles.card}>
         <h2>Diagnóstico Rental</h2>
-        <p className={styles.muted}>Compara as respostas reais de <code>retrieve_all</code> com type=0 e type=1 e conta os serviços devolvidos por cada opção. Isso serve para distinguir opções por serviço de opções Always On antes de alterarmos a experiência do cliente.</p>
-        <RentalTable title="Rental type=0" rows={data.rentalDiagnostics?.type0 ?? []} />
-        <RentalTable title="Rental type=1" rows={data.rentalDiagnostics?.type1 ?? []} />
+        <p className={styles.muted}>Compara as respostas reais de <code>retrieve_all</code> com type=0 e type=1. Se um tipo não tiver rentals, ele aparece como indisponível sem derrubar o diagnóstico do outro.</p>
+        <RentalTable title="Rental type=0" group={data.rentalDiagnostics?.type0} />
+        <RentalTable title="Rental type=1" group={data.rentalDiagnostics?.type1} />
       </section>
 
       <section className={styles.card}>

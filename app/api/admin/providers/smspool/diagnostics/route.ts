@@ -27,36 +27,55 @@ function scalarMetadata(entry: SmsPoolRentalEntry) {
   return metadata;
 }
 
-async function rentalDiagnostics(type: 0 | 1) {
-  const payload = await retrieveSmsPoolRentalIds(type);
-  const rentals = normalizeRentalEntries(payload).slice(0, 20);
+function rentalTypeUnavailable(message: string) {
+  return message.includes("SMSPOOL_API_ERROR:404:") && message.toLowerCase().includes("no available rentals found");
+}
 
-  return Promise.all(rentals.map(async ({ key, entry }) => {
-    const id = String(entry.ID ?? entry.id ?? key);
-    try {
-      const services = await retrieveSmsPoolRentalServices(id);
-      return {
-        queryType: type,
-        id,
-        name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
-        region: entry.region ? String(entry.region) : null,
-        serviceCount: services.length,
-        sampleServices: services.slice(0, 8).map((service) => String(service.name)),
-        metadata: scalarMetadata(entry),
-      };
-    } catch (cause) {
-      return {
-        queryType: type,
-        id,
-        name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
-        region: entry.region ? String(entry.region) : null,
-        serviceCount: null,
-        sampleServices: [],
-        servicesError: cause instanceof Error ? cause.message : "RENTAL_SERVICES_FAILED",
-        metadata: scalarMetadata(entry),
-      };
-    }
-  }));
+async function rentalDiagnostics(type: 0 | 1) {
+  try {
+    const payload = await retrieveSmsPoolRentalIds(type);
+    const rentals = normalizeRentalEntries(payload).slice(0, 20);
+
+    const rows = await Promise.all(rentals.map(async ({ key, entry }) => {
+      const id = String(entry.ID ?? entry.id ?? key);
+      try {
+        const services = await retrieveSmsPoolRentalServices(id);
+        return {
+          queryType: type,
+          id,
+          name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
+          region: entry.region ? String(entry.region) : null,
+          serviceCount: services.length,
+          sampleServices: services.slice(0, 8).map((service) => String(service.name)),
+          metadata: scalarMetadata(entry),
+        };
+      } catch (cause) {
+        return {
+          queryType: type,
+          id,
+          name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
+          region: entry.region ? String(entry.region) : null,
+          serviceCount: null,
+          sampleServices: [],
+          servicesError: cause instanceof Error ? cause.message : "RENTAL_SERVICES_FAILED",
+          metadata: scalarMetadata(entry),
+        };
+      }
+    }));
+
+    return {
+      available: true as const,
+      rows,
+      error: null,
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "RENTAL_CATALOG_FAILED";
+    return {
+      available: false as const,
+      rows: [],
+      error: rentalTypeUnavailable(message) ? "NO_RENTALS_AVAILABLE" : message,
+    };
+  }
 }
 
 export async function GET(request: Request) {
