@@ -23,6 +23,12 @@ test("admin real test purchase is previewed, explicitly confirmed, policy-gated,
   assert.match(route, /provider: "smspool"/);
   assert.match(route, /product: offer\.product/);
 
+  // The public country code is BR, but purchaseActivation reconstructs the
+  // provider offer id and therefore must receive SMSPool's canonical country ID.
+  assert.match(route, /countryId: offer\.countryId/);
+  assert.match(route, /country: preview\.offer\.countryId/);
+  assert.doesNotMatch(route, /country: preview\.offer\.country,\n\s+operator:/);
+
   assert.match(page, /Compra real controlada/);
   assert.match(page, /action: "preview"/);
   assert.match(page, /APROVAR YOUTUBE PARA O TESTE/);
