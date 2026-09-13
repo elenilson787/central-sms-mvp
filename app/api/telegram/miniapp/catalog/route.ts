@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" }, { status: 503 });
   }
   if (!env.smsPoolApiKey) {
-    return Response.json({ error: "SMSPOOL_API_KEY_NOT_CONFIGURED" }, { status: 503 });
+    return Response.json({ error: "CATALOG_PROVIDER_NOT_CONFIGURED" }, { status: 503 });
   }
 
   let body: { initData?: string; country?: string };
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       maxAgeSeconds: 3600,
     });
     const allowed = await consumeRateLimit({
-      scope: "miniapp-smspool-catalog",
+      scope: "miniapp-live-catalog",
       key: validated.user.id,
       limit: 30,
       windowSeconds: 60,
@@ -31,18 +31,35 @@ export async function POST(request: Request) {
     if (!allowed) return Response.json({ error: "RATE_LIMITED" }, { status: 429 });
 
     const catalog = await listSmsPoolLiveCatalog(body.country || "BR");
+    const offers = catalog.offers.map((offer) => ({
+      id: offer.id,
+      country: offer.country,
+      countryName: offer.countryName,
+      product: offer.product,
+      label: offer.label,
+      description: offer.description,
+      kind: offer.kind,
+      stock: offer.stock,
+      salePriceCents: offer.salePriceCents,
+      currency: offer.currency,
+      pricingConfigured: offer.pricingConfigured,
+    }));
+
     return Response.json({
       ok: true,
       mode: "live-readonly",
-      provider: "smspool",
       purchaseExecutionEnabled: false,
-      disclaimer: "Catálogo real do provider. Compra externa permanece bloqueada até aprovação comercial e habilitação explícita.",
-      ...catalog,
+      disclaimer: "Catálogo real conectado. Compras externas permanecem bloqueadas nesta etapa.",
+      countries: catalog.countries,
+      selectedCountry: catalog.selectedCountry,
+      offers,
+      pricingConfigured: catalog.pricingConfigured,
+      purchasesAvailable: false,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
-    console.error("[miniapp-smspool-catalog] failed", { message });
-    return Response.json({ error: message.startsWith("SMSPOOL_") ? message : "SMSPOOL_CATALOG_FAILED" }, { status: 502 });
+    console.error("[miniapp-live-catalog] failed", { message });
+    return Response.json({ error: "CATALOG_FAILED" }, { status: 502 });
   }
 }
