@@ -1,0 +1,1 @@
+Temporary development note: rental catalog distinguishes service-specific rentals from general rentals based on whether the provider returns a service list. This file will be removed after the implementation is merged.
