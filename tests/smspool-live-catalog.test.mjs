@@ -18,7 +18,7 @@ test("Mini App live catalog is authenticated, read-only and white-labeled", asyn
   assert.match(panel, /Para qual app ou site você precisa de um número/);
   assert.match(panel, /Serviço que você quer ativar/);
   assert.match(panel, /Número para \{offer\.label\}/);
-  assert.match(panel, /Compra ainda bloqueada/);
+  assert.match(panel, /Confirmar compra — aguardando liberação/);
   assert.doesNotMatch(panel, /Simular confirmação/);
   assert.doesNotMatch(panel, /SMSPool/);
   assert.doesNotMatch(panel, /providerPrice/);
