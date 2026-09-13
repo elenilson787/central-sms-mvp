@@ -43,7 +43,7 @@ test("Mini App separates one-time activation from live long-term rental discover
   assert.match(panel, /não fica reservado permanentemente/);
   assert.match(panel, /Se o app pedir outro código no futuro/);
   assert.match(panel, /Ver aluguel longo/);
-  assert.match(rentalPanel, /Mesmo número por vários dias/);
+  assert.match(rentalPanel, /Manter o mesmo número por vários dias/);
   assert.match(rentalPanel, /Compra de aluguel ainda bloqueada/);
   assert.match(rentalPanel, /Renovação depende da disponibilidade/);
 });
@@ -76,6 +76,6 @@ test("long-term rental catalog is read-only and uses rental pricing, services an
   assert.match(catalog, /quoteOffer/);
   assert.match(route, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
-  assert.doesNotMatch(route, /purchase/);
-  assert.doesNotMatch(quoteRoute, /purchaseSmsPoolNumber/);
+  assert.doesNotMatch(route, /\/rental\/order|purchaseSmsPoolNumber|purchase_rental/);
+  assert.doesNotMatch(quoteRoute, /\/rental\/order|purchaseSmsPoolNumber|purchase_rental/);
 });
