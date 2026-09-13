@@ -46,6 +46,8 @@ type QuotePayload = {
   price: { configured: boolean; salePriceCents: number | null; currency: "BRL" };
 };
 
+const QUICK_SEARCHES = ["YouTube", "Discord", "Steam"];
+
 function formatMoney(cents: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(cents / 100);
 }
@@ -98,15 +100,15 @@ export default function SmsPoolCatalogPanel() {
 
   useEffect(() => { void loadCatalog("BR"); }, [loadCatalog]);
 
+  const searchQuery = search.trim();
   const filteredOffers = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("pt-BR");
-    if (!query) return offers;
+    const query = searchQuery.toLocaleLowerCase("pt-BR");
+    if (query.length < 2) return [];
     return offers.filter((offer) => `${offer.label} ${offer.countryName}`.toLocaleLowerCase("pt-BR").includes(query));
-  }, [offers, search]);
+  }, [offers, searchQuery]);
 
   async function changeCountry(value: string) {
     setCountry(value);
-    setSearch("");
     setSelectedOffer(null);
     setQuote(null);
     await loadCatalog(value);
@@ -138,62 +140,81 @@ export default function SmsPoolCatalogPanel() {
   }
 
   return <section className={styles.catalogSection}>
-    <div className={styles.previewNotice}>
-      <strong>Catálogo real conectado</strong>
-      <span>Países, serviços e disponibilidade são consultados em tempo real. As compras continuam bloqueadas nesta etapa.</span>
+    <div className={styles.catalogGuide}>
+      <div className={styles.guideIcon}>🔎</div>
+      <div>
+        <strong>Para qual app ou site você precisa de um número?</strong>
+        <p>Digite o nome do serviço que vai enviar o código por SMS. Ex.: procure por <b>YouTube</b> para encontrar um número para verificação do YouTube.</p>
+      </div>
     </div>
 
     <div className={styles.filters}>
+      <label className={styles.fieldLabel} htmlFor="service-search">Serviço que você quer ativar</label>
       <input
+        id="service-search"
         className={styles.input}
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="Buscar serviço"
+        placeholder="Ex.: YouTube, Discord, Steam"
+        autoComplete="off"
       />
-      <select className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
+      <div className={styles.quickSearches} aria-label="Buscas rápidas">
+        <span>Exemplos:</span>
+        {QUICK_SEARCHES.map((item) => <button key={item} className={styles.quickSearchButton} type="button" onClick={() => setSearch(item)}>{item}</button>)}
+      </div>
+
+      <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
+      <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
         {countries.map((item) => <option key={item.id} value={item.code || item.id}>{item.name} {item.code ? `(${item.code})` : ""}</option>)}
       </select>
+      <span className={styles.helperText}>O país define de onde será o número que receberá o SMS.</span>
     </div>
 
     {!pricingConfigured && !loading && <div className={styles.warnNotice}>
       Os preços finais em reais estão sendo configurados. O catálogo e a disponibilidade já podem ser consultados normalmente.
     </div>}
 
-    <div className={styles.offerMeta}>
-      <span>{offers.length} serviços neste país</span>
-      <span>Compra real: bloqueada</span>
-    </div>
-
-    {loading && <div className={styles.loading}>Carregando catálogo real…</div>}
+    {loading && <div className={styles.loading}>Carregando serviços disponíveis…</div>}
     {error && <div className={styles.error}>{error}</div>}
 
-    {!loading && !error && <div className={styles.offerList}>
-      {!filteredOffers.length && <div className={styles.empty}>Nenhum serviço encontrado para este filtro.</div>}
-      {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
-        <div className={styles.offerTop}>
-          <div>
-            <span className={styles.demoBadge}>AO VIVO</span>
-            <h3>{offer.label}</h3>
-            <p>{offer.countryName} · SMS de uso único</p>
-          </div>
-          <div className={styles.offerPrice}>
-            {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
-          </div>
-        </div>
-        <p className={styles.offerDescription}>{offer.description}</p>
-        <div className={styles.offerMeta}>
-          <span>Disponibilidade: consultar</span>
-          <span>Preço final da Central SMS</span>
-        </div>
-        <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver disponibilidade</button>
-      </article>)}
+    {!loading && !error && searchQuery.length < 2 && <div className={styles.searchPrompt}>
+      <strong>Comece digitando o nome do app ou site</strong>
+      <span>Por exemplo: “YouTube”. Você verá apenas as opções correspondentes, em vez de navegar por centenas de serviços.</span>
     </div>}
 
+    {!loading && !error && searchQuery.length >= 2 && <>
+      <div className={styles.resultsHeader}>
+        <strong>{filteredOffers.length} {filteredOffers.length === 1 ? "opção encontrada" : "opções encontradas"}</strong>
+        <span>para “{searchQuery}”</span>
+      </div>
+      <div className={styles.offerList}>
+        {!filteredOffers.length && <div className={styles.empty}>Não encontramos esse serviço neste país. Confira a escrita ou tente outro país.</div>}
+        {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
+          <div className={styles.offerTop}>
+            <div>
+              <span className={styles.demoBadge}>AO VIVO</span>
+              <h3>Número para {offer.label}</h3>
+              <p>{offer.countryName} · SMS de verificação</p>
+            </div>
+            <div className={styles.offerPrice}>
+              {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
+            </div>
+          </div>
+          <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra.</p>
+          <div className={styles.offerMeta}>
+            <span>País: {offer.countryName}</span>
+            <span>Disponibilidade: consultar</span>
+          </div>
+          <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver disponibilidade para {offer.label}</button>
+        </article>)}
+      </div>
+    </>}
+
     {selectedOffer && <div className={styles.modalBackdrop} role="presentation" onClick={() => { setSelectedOffer(null); setQuote(null); }}>
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Disponibilidade do número" onClick={(event) => event.stopPropagation()}>
+      <section className={styles.modal} role="dialog" aria-modal="true" aria-label={`Número para ${selectedOffer.label}`} onClick={(event) => event.stopPropagation()}>
         <div className={styles.modalHandle} />
         <div className={styles.modalHeader}>
-          <div><span className={styles.demoBadge}>CATÁLOGO REAL</span><h2>{selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de uso único</p></div>
+          <div><span className={styles.demoBadge}>CATÁLOGO REAL</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
           <button className={styles.close} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>×</button>
         </div>
 
@@ -201,17 +222,17 @@ export default function SmsPoolCatalogPanel() {
         {quote && <>
           <div className={styles.quoteRows}>
             <div className={styles.quoteTotal}><span>Preço final</span><strong>{quote.price.salePriceCents !== null ? formatMoney(quote.price.salePriceCents) : "Preço em configuração"}</strong></div>
-            <div><span>Estoque agora</span><strong>{quote.availability.stock}</strong></div>
+            <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
             <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
             <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
           </div>
 
           <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
-            {quote.availability.stock > 0 ? "Há números disponíveis para este serviço agora." : "Este serviço está sem estoque neste momento."}
+            {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
           </div>
 
           <p className={styles.modalText}>
-            Esta consulta é real, mas nenhuma compra, reserva ou débito é executado. A compra será liberada apenas quando a operação comercial estiver pronta.
+            Quando a compra estiver liberada, você receberá um número para usar no {selectedOffer.label} e acompanhará o código SMS dentro da Central SMS.
           </p>
           <button className={styles.primaryButton} type="button" disabled>
             Compra ainda bloqueada
