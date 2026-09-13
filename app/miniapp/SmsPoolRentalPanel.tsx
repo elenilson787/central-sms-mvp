@@ -22,6 +22,8 @@ type RentalService = {
   name: string;
 };
 
+type RentalServiceMode = "GENERAL" | "SERVICE_SPECIFIC";
+
 type RentalListPayload = {
   ok: true;
   mode: "live-readonly";
@@ -38,6 +40,7 @@ type RentalDetailsPayload = {
   rental: RentalType;
   plans: RentalPlan[];
   services: RentalService[];
+  serviceMode: RentalServiceMode;
 };
 
 type RentalQuotePayload = {
@@ -50,6 +53,7 @@ type RentalQuotePayload = {
   walletBalanceCents: number;
   rental: RentalType;
   service: RentalService | null;
+  serviceMode: RentalServiceMode;
   days: number;
   availability: { stock: number };
   price: { configured: boolean; salePriceCents: number | null; currency: "BRL" };
@@ -150,7 +154,7 @@ export default function SmsPoolRentalPanel() {
 
   const query = search.trim().toLocaleLowerCase("pt-BR");
   const filteredServices = useMemo(() => {
-    if (!details || query.length < 2) return [];
+    if (!details || details.serviceMode !== "SERVICE_SPECIFIC" || query.length < 2) return [];
     return details.services
       .filter((service) => service.name.toLocaleLowerCase("pt-BR").includes(query))
       .slice(0, 30);
@@ -164,7 +168,9 @@ export default function SmsPoolRentalPanel() {
 
   async function checkAvailability() {
     const webApp = window.Telegram?.WebApp;
-    if (!webApp?.initData || !rentalId || !days || !selectedService) return;
+    if (!webApp?.initData || !rentalId || !days || !details) return;
+    if (details.serviceMode === "SERVICE_SPECIFIC" && !selectedService) return;
+
     setQuoteLoading(true); setQuote(null);
     try {
       const response = await fetch("/api/telegram/miniapp/rentals/quote", {
@@ -174,7 +180,7 @@ export default function SmsPoolRentalPanel() {
           initData: webApp.initData,
           rentalId,
           days,
-          serviceId: selectedService.id,
+          serviceId: details.serviceMode === "SERVICE_SPECIFIC" ? selectedService?.id : undefined,
         }),
       });
       const payload = await response.json() as RentalQuotePayload | { error?: string };
@@ -190,13 +196,14 @@ export default function SmsPoolRentalPanel() {
   }
 
   const selectedPlan = details?.plans.find((plan) => plan.days === days) ?? null;
+  const canCheck = Boolean(days && details && (details.serviceMode === "GENERAL" || selectedService));
 
   return <section className={styles.catalogSection}>
     <div className={styles.catalogGuide}>
       <div className={styles.guideIcon}>🗓️</div>
       <div>
         <strong>Manter o mesmo número por vários dias</strong>
-        <p>Escolha o tipo de número, o período de aluguel e o app/site que poderá enviar códigos para ele. Esta consulta é real, mas a compra continua bloqueada.</p>
+        <p>Escolha o país/tipo e o período. Algumas opções funcionam como aluguel geral; outras exigem escolher o app/site que poderá enviar códigos. Esta consulta é real, mas a compra continua bloqueada.</p>
       </div>
     </div>
 
@@ -230,7 +237,12 @@ export default function SmsPoolRentalPanel() {
           {selectedPlan && <span className={styles.helperText}>Preço final do aluguel para o período selecionado: {selectedPlan.salePriceCents !== null ? formatMoney(selectedPlan.salePriceCents) : "em configuração"}.</span>}
         </div>
 
-        <div ref={serviceRef}>
+        {details.serviceMode === "GENERAL" && <div ref={serviceRef} className={styles.okNotice}>
+          <strong>Aluguel geral</strong><br />
+          Esta opção não precisa escolher um app ou site. O mesmo número fica disponível durante o período contratado e pode receber SMS dos serviços permitidos pelas regras do fornecedor.
+        </div>}
+
+        {details.serviceMode === "SERVICE_SPECIFIC" && <div ref={serviceRef}>
           <label className={styles.fieldLabel} htmlFor="rental-service-search">Para qual app ou site?</label>
           <input
             id="rental-service-search"
@@ -262,12 +274,16 @@ export default function SmsPoolRentalPanel() {
           </select>
           <span className={styles.helperText}>A lista mostra os apps e sites aceitos por este tipo de aluguel. O número específico só é atribuído quando a compra for liberada.</span>
 
-          {query.length < 2 && <div className={styles.searchPrompt}>
+          {details.services.length === 0 && <div className={styles.warnNotice}>
+            Esta opção exige um serviço específico, mas nenhum serviço permitido está disponível no catálogo da Central SMS neste momento.
+          </div>}
+
+          {details.services.length > 0 && query.length < 2 && <div className={styles.searchPrompt}>
             <strong>Pesquise acima ou escolha diretamente na lista</strong>
             <span>Assim você consegue ver quais serviços estão realmente disponíveis para esta opção de número.</span>
           </div>}
 
-          {query.length >= 2 && <div className={styles.offerList}>
+          {details.services.length > 0 && query.length >= 2 && <div className={styles.offerList}>
             {!filteredServices.length && <div className={styles.empty}>Esse serviço não apareceu para esta opção de aluguel. Escolha um dos serviços disponíveis na lista ou tente outra opção de número.</div>}
             {filteredServices.map((service) => <button
               key={service.id}
@@ -278,10 +294,14 @@ export default function SmsPoolRentalPanel() {
               {selectedService?.id === service.id ? "✓ " : ""}{service.name}
             </button>)}
           </div>}
-        </div>
+        </div>}
 
-        {selectedService && days && <button ref={actionRef} className={styles.primaryButton} type="button" disabled={quoteLoading} onClick={() => void checkAvailability()}>
-          {quoteLoading ? "Consultando…" : `Consultar disponibilidade para ${selectedService.name}`}
+        {canCheck && <button ref={actionRef} className={styles.primaryButton} type="button" disabled={quoteLoading} onClick={() => void checkAvailability()}>
+          {quoteLoading
+            ? "Consultando…"
+            : details.serviceMode === "GENERAL"
+              ? "Consultar disponibilidade do aluguel"
+              : `Consultar disponibilidade para ${selectedService?.name ?? "o serviço"}`}
         </button>}
       </>}
     </div>}
@@ -290,7 +310,7 @@ export default function SmsPoolRentalPanel() {
       <div className={styles.offerTop}>
         <div>
           <span className={styles.demoBadge}>ALUGUEL LONGO · SOMENTE CONSULTA</span>
-          <h3>{quote.service?.name ?? "Número de longo prazo"}</h3>
+          <h3>{quote.serviceMode === "GENERAL" ? "Número de aluguel geral" : quote.service?.name ?? "Número de longo prazo"}</h3>
           <p>{quote.rental.name} · {quote.days} dias</p>
         </div>
         <div className={styles.offerPrice}>{quote.price.salePriceCents !== null ? formatMoney(quote.price.salePriceCents) : "Preço em configuração"}</div>
@@ -305,6 +325,10 @@ export default function SmsPoolRentalPanel() {
       <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
         {quote.availability.stock > 0 ? "Há números disponíveis para este período agora." : "Não há números disponíveis para este período neste momento."}
       </div>
+
+      {quote.serviceMode === "GENERAL" && <div className={styles.okNotice}>
+        Este é um aluguel geral: o número não fica limitado a um único app/site, mas o uso continua sujeito aos serviços permitidos e às regras do fornecedor.
+      </div>}
 
       <div className={styles.warnNotice}>
         O número fica sob seu acesso apenas durante o período contratado. Renovação depende da disponibilidade e das regras do fornecedor; não trate o número como permanente depois do vencimento.
