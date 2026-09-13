@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ActivationTracking from "./ActivationTracking";
 import PixGlobalMonitor from "./PixGlobalMonitor";
 import PixPaymentHistory from "./PixPaymentHistory";
 import PixRechargePanel from "./PixRechargePanel";
@@ -19,7 +20,10 @@ type Activation = {
   status: string;
   salePriceCents: number;
   createdAt: string;
+  updatedAt?: string;
   expiresAt?: string;
+  smsCode?: string;
+  smsText?: string;
 };
 
 type MiniAppSession = {
@@ -33,6 +37,8 @@ type MiniAppSession = {
   wallet: { balanceCents: number; currency: string };
   recentActivations: Activation[];
 };
+
+const LIVE_ACTIVATION_STATUSES = new Set(["creating", "number_received", "waiting_sms"]);
 
 function formatMoney(cents: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(cents / 100);
@@ -64,7 +70,7 @@ function statusLabel(status: string) {
 
 function viewTitle(view: View) {
   if (view === "catalog") return "Catálogo";
-  if (view === "activations") return "Ativações";
+  if (view === "activations") return "Minhas ativações";
   if (view === "pix") return "Recarregar via PIX";
   return "Central SMS";
 }
@@ -73,15 +79,22 @@ export default function TelegramMiniAppPage() {
   const [session, setSession] = useState<MiniAppSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false);
   const [view, setView] = useState<View>("home");
 
-  const loadSession = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadSession = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (silent) setTrackingRefreshing(true);
+    else {
+      setLoading(true);
+      setError(null);
+    }
+
     const webApp = window.Telegram?.WebApp;
     if (!webApp?.initData) {
-      setError("Abra esta página pelo bot no Telegram para autenticar sua sessão.");
-      setLoading(false);
+      if (!silent) setError("Abra esta página pelo bot no Telegram para autenticar sua sessão.");
+      if (silent) setTrackingRefreshing(false);
+      else setLoading(false);
       return;
     }
 
@@ -98,23 +111,38 @@ export default function TelegramMiniAppPage() {
       const payload = await response.json() as { session?: MiniAppSession; error?: string };
       if (!response.ok || !payload.session) throw new Error(payload.error ?? "SESSION_FAILED");
       setSession(payload.session);
-      webApp.HapticFeedback?.notificationOccurred("success");
+      if (!silent) webApp.HapticFeedback?.notificationOccurred("success");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível abrir sua sessão.");
-      webApp?.HapticFeedback?.notificationOccurred("error");
+      if (!silent) {
+        setError(cause instanceof Error ? cause.message : "Não foi possível abrir sua sessão.");
+        webApp?.HapticFeedback?.notificationOccurred("error");
+      } else {
+        console.error("MINIAPP_ACTIVATION_REFRESH_FAILED", cause);
+      }
     } finally {
-      setLoading(false);
+      if (silent) setTrackingRefreshing(false);
+      else setLoading(false);
     }
   }, []);
 
   useEffect(() => { void loadSession(); }, [loadSession]);
 
+  const recentList = session?.recentActivations ?? [];
+  const homeRecentList = recentList.slice(0, 5);
+  const hasLiveActivation = recentList.some((activation) => LIVE_ACTIVATION_STATUSES.has(activation.status));
+
+  useEffect(() => {
+    if (view !== "activations" || !hasLiveActivation) return;
+    const timer = window.setInterval(() => {
+      void loadSession({ silent: true });
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [view, hasLiveActivation, loadSession]);
+
   function goCatalog() {
     setView("catalog");
     window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
   }
-
-  const recentList = session?.recentActivations ?? [];
 
   return (
     <main className={styles.shell}>
@@ -136,7 +164,7 @@ export default function TelegramMiniAppPage() {
 
         <PixGlobalMonitor
           active={Boolean(session) && view !== "pix"}
-          onBalanceUpdated={loadSession}
+          onBalanceUpdated={() => loadSession()}
           onOpenPix={() => setView("pix")}
         />
 
@@ -165,23 +193,23 @@ export default function TelegramMiniAppPage() {
             </button>
             <button className={styles.action} type="button" onClick={() => setView("activations")}>
               <div className={styles.actionIcon}>📋</div>
-              <span className={styles.actionTitle}>Ativações</span>
-              <span className={styles.actionText}>Status, números e histórico recente</span>
+              <span className={styles.actionTitle}>Minhas ativações</span>
+              <span className={styles.actionText}>Acompanhar número, status e código SMS</span>
             </button>
           </section>
 
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Ativações recentes</h2>
-              <span className={styles.badge}>{recentList.length}/5</span>
+              <span className={styles.badge}>{homeRecentList.length}/5</span>
             </div>
-            <ActivationList activations={recentList} currency={session.wallet.currency} compact />
+            <ActivationList activations={homeRecentList} currency={session.wallet.currency} compact />
           </section>
         </>}
 
         {session && view === "pix" && <>
           <PixRechargePanel
-            onBalanceUpdated={loadSession}
+            onBalanceUpdated={() => loadSession()}
             onPaymentConfirmed={() => setView("home")}
           />
           <PixPaymentHistory refreshKey={session.wallet.balanceCents} />
@@ -191,11 +219,17 @@ export default function TelegramMiniAppPage() {
 
         {session && view === "activations" && <section className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Suas ativações</h2>
-            <span className={styles.badge}>{recentList.length} recentes</span>
+            <h2 className={styles.sectionTitle}>Acompanhe seus pedidos</h2>
+            <span className={styles.badge}>{recentList.length} no histórico</span>
           </div>
-          <ActivationList activations={recentList} currency={session.wallet.currency} />
-          <p className={styles.helper}>A sessão atual carrega as 5 ativações mais recentes. O histórico será expandido quando a compra real do provider for liberada.</p>
+          <ActivationTracking
+            activations={recentList}
+            currency={session.wallet.currency}
+            autoRefreshActive={hasLiveActivation}
+            refreshing={trackingRefreshing}
+            onRefresh={() => void loadSession({ silent: true })}
+          />
+          <p className={styles.helper}>Exibimos até 20 ativações recentes. Enquanto houver um pedido aguardando número ou SMS, esta tela atualiza automaticamente a cada 10 segundos.</p>
         </section>}
 
         <footer className={styles.footer}>

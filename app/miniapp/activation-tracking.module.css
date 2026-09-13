@@ -1,0 +1,328 @@
+.wrapper {
+  display: grid;
+  gap: 12px;
+}
+
+.liveBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tg-theme-button-color, #2481cc) 10%, var(--tg-theme-secondary-bg-color, #131d2d));
+  border: 1px solid color-mix(in srgb, var(--tg-theme-button-color, #2481cc) 24%, transparent);
+}
+
+.liveBar > div {
+  min-width: 0;
+}
+
+.liveBar strong,
+.liveBar span {
+  display: block;
+}
+
+.liveBar strong {
+  font-size: 13px;
+}
+
+.liveBar span {
+  margin-top: 3px;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.refreshButton {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 12px;
+  background: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #fff);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.refreshButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.card,
+.empty {
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--tg-theme-secondary-bg-color, #131d2d);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 18%, transparent);
+}
+
+.empty {
+  display: grid;
+  gap: 5px;
+  text-align: center;
+}
+
+.empty strong {
+  font-size: 14px;
+}
+
+.empty span {
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kind {
+  display: inline-block;
+  margin-bottom: 5px;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.cardHeader p {
+  margin: 3px 0 0;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 11px;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 46%;
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.statusLive {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.statusDone {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+}
+
+.statusFailed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: pulse 1.8s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.step {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 9px;
+  text-align: center;
+}
+
+.step::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: -50%;
+  width: 100%;
+  height: 2px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 25%, transparent);
+  z-index: 0;
+}
+
+.step:first-child::before {
+  display: none;
+}
+
+.stepDot {
+  position: relative;
+  z-index: 1;
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--tg-theme-bg-color, #0b1220);
+  border: 2px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 35%, transparent);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.stepDone,
+.stepCurrent {
+  color: var(--tg-theme-text-color, #f8fafc);
+}
+
+.stepDone::before,
+.stepCurrent::before {
+  background: var(--tg-theme-button-color, #2481cc);
+}
+
+.stepDone .stepDot,
+.stepCurrent .stepDot {
+  border-color: var(--tg-theme-button-color, #2481cc);
+  background: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #fff);
+}
+
+.stepCurrent .stepDot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tg-theme-button-color, #2481cc) 18%, transparent);
+}
+
+.dataGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.dataBox {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tg-theme-bg-color, #0b1220) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 16%, transparent);
+}
+
+.dataBox > span,
+.smsMessage > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dataBox > strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.dataBox button {
+  margin-top: 8px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--tg-theme-link-color, #60a5fa);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.codeBox {
+  border-color: rgba(16, 185, 129, 0.30);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.code {
+  font-size: 20px !important;
+  letter-spacing: 0.08em;
+}
+
+.smsMessage,
+.waitingNotice,
+.failureNotice {
+  margin-top: 10px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.smsMessage {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+.smsMessage p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.waitingNotice {
+  background: rgba(59, 130, 246, 0.08);
+  color: #bfdbfe;
+}
+
+.failureNotice {
+  margin-bottom: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #fecaca;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-top: 11px;
+  color: var(--tg-theme-hint-color, #94a3b8);
+  font-size: 9px;
+}
+
+@media (max-width: 420px) {
+  .liveBar {
+    align-items: flex-start;
+  }
+
+  .refreshButton {
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .dataGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .statusPill {
+    max-width: 50%;
+  }
+}

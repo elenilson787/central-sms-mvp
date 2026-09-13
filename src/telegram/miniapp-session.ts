@@ -22,7 +22,10 @@ export type MiniAppSession = {
     status: string;
     salePriceCents: number;
     createdAt: string;
+    updatedAt?: string;
     expiresAt?: string;
+    smsCode?: string;
+    smsText?: string;
   }>;
 };
 
@@ -79,10 +82,10 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
 
   const { data: activations, error: activationsError } = await supabase
     .from("activations")
-    .select("id,kind,country,product,phone,status,sale_price_cents,created_at,expires_at")
+    .select("id,kind,country,product,phone,status,sale_price_cents,created_at,updated_at,expires_at,sms_code,sms_text")
     .eq("user_id", appUser.id)
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(20);
 
   if (activationsError) throw new Error(`MINIAPP_ACTIVATIONS_READ_FAILED:${activationsError.message}`);
 
@@ -107,7 +110,10 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
       status: activation.status,
       salePriceCents: Number(activation.sale_price_cents),
       createdAt: activation.created_at,
+      updatedAt: activation.updated_at ?? undefined,
       expiresAt: activation.expires_at ?? undefined,
+      smsCode: activation.sms_code ?? undefined,
+      smsText: activation.sms_text ?? undefined,
     })),
   };
 }
