@@ -26,9 +26,11 @@ export function normalizeRentalEntries(payload: SmsPoolRentalList | unknown): Ar
     }
   }
 
-  return Object.entries(payload)
-    .filter(([, value]) => looksLikeRentalEntry(value))
-    .map(([key, entry]) => ({ key, entry }));
+  const normalized: Array<{ key: string; entry: SmsPoolRentalEntry }> = [];
+  for (const [key, value] of Object.entries(payload)) {
+    if (looksLikeRentalEntry(value)) normalized.push({ key, entry: value });
+  }
+  return normalized;
 }
 
 function normalizePriceMap(value: unknown): Record<string, string | number> {
