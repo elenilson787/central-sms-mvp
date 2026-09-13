@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { activationCountryName, activationProductName, terminalActivationMessage } from "./activation-display";
 import styles from "./activation-tracking.module.css";
 
 export type ActivationTrackingItem = {
@@ -8,6 +9,7 @@ export type ActivationTrackingItem = {
   kind: "ONE_TIME_SMS" | "TEMPORARY_HOSTING";
   country: string;
   product: string;
+  productLabel?: string;
   phone?: string;
   status: string;
   salePriceCents: number;
@@ -108,13 +110,15 @@ export default function ActivationTracking({ activations, currency, autoRefreshA
         const failed = isFailureStatus(activation.status);
         const code = activation.smsCode?.trim();
         const smsText = activation.smsText?.trim();
+        const serviceName = activationProductName(activation.product, activation.productLabel);
+        const countryName = activationCountryName(activation.country);
 
         return <article className={styles.card} key={activation.id}>
           <div className={styles.cardHeader}>
             <div>
               <span className={styles.kind}>{kindLabel(activation.kind)}</span>
-              <h3>Número para {activation.product}</h3>
-              <p>{activation.country}</p>
+              <h3>Número para {serviceName}</h3>
+              <p>{countryName}</p>
             </div>
             <span className={`${styles.statusPill} ${failed ? styles.statusFailed : live ? styles.statusLive : styles.statusDone}`}>
               {live && <span className={styles.pulse} aria-hidden="true" />}
@@ -134,7 +138,7 @@ export default function ActivationTracking({ activations, currency, autoRefreshA
           </div>}
 
           {failed && <div className={styles.failureNotice}>
-            Esta ativação foi encerrada com status <strong>{statusLabel(activation.status)}</strong>. Nenhuma nova atualização de SMS é esperada para ela.
+            <strong>{statusLabel(activation.status)}.</strong> {terminalActivationMessage(activation.status)}
           </div>}
 
           <div className={styles.dataGrid}>
