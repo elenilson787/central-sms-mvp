@@ -87,28 +87,45 @@ test("PIX payer PII is not inserted into local payments table", async () => {
   assert.match(pixRoute, /createPixOrder/);
 });
 
-test("preview catalog cannot execute provider purchases", async () => {
-  const catalog = await readFile(new URL("../src/catalog/preview.ts", import.meta.url), "utf8");
-  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/quote/route.ts", import.meta.url), "utf8");
+test("live catalog cannot execute provider purchases", async () => {
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
-  assert.match(catalog, /preview: true/);
+  const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+  const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
+  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/quote/route.ts", import.meta.url), "utf8");
+  const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
+
+  assert.match(page, /SmsPoolCatalogPanel/);
+  assert.match(panel, /Compra ainda bloqueada/);
+  assert.match(panel, /nenhuma compra, reserva ou débito é executado/i);
+  assert.match(catalogRoute, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
-  assert.match(quoteRoute, /PREVIEW_CATALOG_ONLY/);
-  assert.doesNotMatch(quoteRoute, /purchaseActivation/);
-  assert.match(page, /Nenhuma compra, reserva ou débito foi executado/);
+  assert.doesNotMatch(catalogRoute, /purchaseSmsPoolNumber/);
+  assert.doesNotMatch(quoteRoute, /purchaseSmsPoolNumber/);
+  assert.doesNotMatch(catalog, /purchaseSmsPoolNumber/);
 });
 
-test("preview pricing is calculated server-side and customer sees only final price", async () => {
+test("live catalog pricing is calculated server-side and provider costs stay off the customer API", async () => {
   const pricing = await readFile(new URL("../src/pricing/quote.ts", import.meta.url), "utf8");
-  const catalogRoute = await readFile(new URL("../app/api/catalog/route.ts", import.meta.url), "utf8");
-  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/quote/route.ts", import.meta.url), "utf8");
-  const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
+  const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
+  const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
+  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/quote/route.ts", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+
   assert.match(pricing, /markupPercent/);
   assert.match(pricing, /markupFixedBrlCents/);
   assert.match(pricing, /salePriceCents/);
-  assert.match(catalogRoute, /quoteOffer/);
-  assert.doesNotMatch(quoteRoute, /providerCostBrlCents/);
-  assert.doesNotMatch(quoteRoute, /markupPercent/);
-  assert.doesNotMatch(page, /Markup:/);
-  assert.match(page, /Preço final/);
+  assert.match(catalog, /quoteOffer/);
+  assert.match(panel, /Preço final/);
+  assert.match(panel, /salePriceCents/);
+  assert.match(panel, /Preço em configuração/);
+  assert.doesNotMatch(panel, /providerPrice/);
+  assert.doesNotMatch(panel, /providerCurrency/);
+  assert.doesNotMatch(panel, /PROVIDER_TO_BRL_RATE/);
+  assert.doesNotMatch(panel, /DEFAULT_MARKUP_PERCENT/);
+  assert.doesNotMatch(panel, /DEFAULT_MARKUP_FIXED_BRL_CENTS/);
+  assert.doesNotMatch(panel, /Markup:/);
+  assert.doesNotMatch(catalogRoute, /providerPrice:/);
+  assert.doesNotMatch(catalogRoute, /providerCurrency:/);
+  assert.doesNotMatch(quoteRoute, /providerPrice:/);
+  assert.doesNotMatch(quoteRoute, /providerCurrency:/);
 });
