@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       walletBalanceCents: session.wallet.balanceCents,
       rental: quote.rental,
       service: quote.service,
+      serviceMode: quote.serviceMode,
       days: quote.days,
       availability: { stock: quote.stock },
       price: {
