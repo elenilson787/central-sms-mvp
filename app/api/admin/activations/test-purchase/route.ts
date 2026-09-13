@@ -1,14 +1,16 @@
 import { purchaseActivation } from "@/src/activations/service";
-import { assertServiceAllowed } from "@/src/compliance/policy";
+import { assertServiceAllowed, isRiskCategoryBlocked } from "@/src/compliance/policy";
 import { env } from "@/src/config/env";
+import { getSupabaseAdmin } from "@/src/db/supabase-server";
 import { listSmsPoolLiveCatalog, quoteSmsPoolCatalogOffer } from "@/src/providers/smspool/catalog";
 import { isAdminRequest } from "@/src/security/admin-auth";
 import { getWalletBalanceCents } from "@/src/wallet/service";
 
-const CONFIRMATION = "BUY_ONE_REAL_YOUTUBE_BR";
+const PURCHASE_CONFIRMATION = "BUY_ONE_REAL_YOUTUBE_BR";
+const POLICY_CONFIRMATION = "APPROVE_YOUTUBE_BR_STANDARD";
 
 type RequestBody = {
-  action?: "preview" | "execute";
+  action?: "preview" | "approve_service" | "execute";
   userId?: string;
   idempotencyKey?: string;
   confirmation?: string;
@@ -94,6 +96,59 @@ async function buildPreview(userId: string) {
   };
 }
 
+async function approveYouTubeBrazilService() {
+  const { offer } = await resolveYouTubeBrazilOffer();
+  const supabase = getSupabaseAdmin();
+  const existing = await supabase
+    .from("service_policies")
+    .select("id,enabled,risk_category,notes")
+    .eq("provider", "smspool")
+    .eq("product", offer.product)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+
+  if (existing.data) {
+    const riskCategory = String(existing.data.risk_category ?? "");
+    if (isRiskCategoryBlocked(riskCategory)) {
+      throw new Error("SERVICE_BLOCKED_BY_COMPLIANCE_POLICY");
+    }
+    if (riskCategory && riskCategory !== "standard") {
+      throw new Error("EXISTING_SERVICE_POLICY_REQUIRES_MANUAL_REVIEW");
+    }
+
+    const update = await supabase
+      .from("service_policies")
+      .update({
+        enabled: true,
+        risk_category: "standard",
+        notes: "Admin-approved for the controlled YouTube/Brazil SMSPool test after written commercial approval.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.data.id)
+      .select("provider,product,enabled,risk_category,notes")
+      .single();
+
+    if (update.error) throw update.error;
+    return { offer, policy: update.data };
+  }
+
+  const insert = await supabase
+    .from("service_policies")
+    .insert({
+      provider: "smspool",
+      product: offer.product,
+      enabled: true,
+      risk_category: "standard",
+      notes: "Admin-approved for the controlled YouTube/Brazil SMSPool test after written commercial approval.",
+    })
+    .select("provider,product,enabled,risk_category,notes")
+    .single();
+
+  if (insert.error) throw insert.error;
+  return { offer, policy: insert.data };
+}
+
 export async function POST(request: Request) {
   if (!isAdminRequest(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
 
@@ -108,18 +163,33 @@ export async function POST(request: Request) {
   if (!userId) return Response.json({ error: "user_id_required" }, { status: 400 });
 
   const action = body.action ?? "preview";
-  if (action !== "preview" && action !== "execute") {
+  if (action !== "preview" && action !== "approve_service" && action !== "execute") {
     return Response.json({ error: "invalid_action" }, { status: 400 });
   }
 
   try {
+    if (action === "approve_service") {
+      if (body.confirmation !== POLICY_CONFIRMATION) {
+        return Response.json({ error: "explicit_policy_confirmation_required" }, { status: 400 });
+      }
+
+      const approved = await approveYouTubeBrazilService();
+      const preview = await buildPreview(userId);
+      return Response.json({
+        ok: true,
+        mode: "policy_approved",
+        approved,
+        preview,
+      });
+    }
+
     const preview = await buildPreview(userId);
 
     if (action === "preview") {
       return Response.json({ ok: true, mode: "preview", preview });
     }
 
-    if (body.confirmation !== CONFIRMATION) {
+    if (body.confirmation !== PURCHASE_CONFIRMATION) {
       return Response.json({ error: "explicit_confirmation_required" }, { status: 400 });
     }
 
@@ -154,6 +224,7 @@ export async function POST(request: Request) {
       "SMSPOOL_API_KEY_NOT_CONFIGURED",
       "SERVICE_NOT_APPROVED_FOR_SALE",
       "SERVICE_BLOCKED_BY_COMPLIANCE_POLICY",
+      "EXISTING_SERVICE_POLICY_REQUIRES_MANUAL_REVIEW",
       "OFFER_NOT_AVAILABLE",
       "INSUFFICIENT_BALANCE",
       "PRICING_NOT_CONFIGURED",
