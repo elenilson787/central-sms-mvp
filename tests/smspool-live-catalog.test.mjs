@@ -33,15 +33,19 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
   assert.match(panel, /Não encontramos esse serviço neste país/);
 });
 
-test("Mini App explains one-time activation versus long-term number use", async () => {
+test("Mini App separates one-time activation from live long-term rental discovery", async () => {
   const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+  const rentalPanel = await readFile(new URL("../app/miniapp/SmsPoolRentalPanel.tsx", import.meta.url), "utf8");
 
   assert.match(panel, /Ativação única/);
   assert.match(panel, /Manter número por mais tempo/);
-  assert.match(panel, /EM INTEGRAÇÃO/);
+  assert.match(panel, /CATÁLOGO REAL/);
   assert.match(panel, /não fica reservado permanentemente/);
   assert.match(panel, /Se o app pedir outro código no futuro/);
-  assert.match(panel, /modalidade de aluguel longo/);
+  assert.match(panel, /Ver aluguel longo/);
+  assert.match(rentalPanel, /Manter o mesmo número por vários dias/);
+  assert.match(rentalPanel, /Compra de aluguel ainda bloqueada/);
+  assert.match(rentalPanel, /Renovação depende da disponibilidade/);
 });
 
 test("SMSPool catalog uses real provider pricing and stock reads without purchase", async () => {
@@ -53,4 +57,25 @@ test("SMSPool catalog uses real provider pricing and stock reads without purchas
   assert.match(catalog, /quoteOffer/);
   assert.doesNotMatch(catalog, /purchaseSmsPoolNumber/);
   assert.match(catalog, /PROVIDER_TO_BRL_RATE_NOT_CONFIGURED/);
+});
+
+test("long-term rental catalog is read-only and uses rental pricing, services and stock", async () => {
+  const client = await readFile(new URL("../src/providers/smspool/client.ts", import.meta.url), "utf8");
+  const catalog = await readFile(new URL("../src/providers/smspool/rental-catalog.ts", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/telegram/miniapp/rentals/route.ts", import.meta.url), "utf8");
+  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/rentals/quote/route.ts", import.meta.url), "utf8");
+
+  assert.match(client, /\/rental\/retrieve_all/);
+  assert.match(client, /\/rental\/retrieve_services/);
+  assert.match(client, /\/rental\/retrieve_pricing/);
+  assert.match(client, /\/rental\/stock/);
+  assert.doesNotMatch(client, /\/rental\/order/);
+  assert.doesNotMatch(client, /purchase_rental/);
+
+  assert.match(catalog, /kind: "TEMPORARY_HOSTING"/);
+  assert.match(catalog, /quoteOffer/);
+  assert.match(route, /purchaseExecutionEnabled: false/);
+  assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
+  assert.doesNotMatch(route, /\/rental\/order|purchaseSmsPoolNumber|purchase_rental/);
+  assert.doesNotMatch(quoteRoute, /\/rental\/order|purchaseSmsPoolNumber|purchase_rental/);
 });
