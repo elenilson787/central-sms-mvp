@@ -3,13 +3,60 @@ import {
   retrieveSmsPoolBalance,
   retrieveSmsPoolCountries,
   retrieveSmsPoolPricing,
+  retrieveSmsPoolRentalIds,
+  retrieveSmsPoolRentalServices,
   retrieveSmsPoolServices,
+  type SmsPoolRentalEntry,
 } from "@/src/providers/smspool/client";
+import { normalizeRentalEntries } from "@/src/providers/smspool/rental-normalize";
 import { isAdminRequest } from "@/src/security/admin-auth";
 
 function safeNumber(value: string | number | undefined) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function scalarMetadata(entry: SmsPoolRentalEntry) {
+  const metadata: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (key === "pricing") continue;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+      metadata[key] = value;
+    }
+  }
+  return metadata;
+}
+
+async function rentalDiagnostics(type: 0 | 1) {
+  const payload = await retrieveSmsPoolRentalIds(type);
+  const rentals = normalizeRentalEntries(payload).slice(0, 20);
+
+  return Promise.all(rentals.map(async ({ key, entry }) => {
+    const id = String(entry.ID ?? entry.id ?? key);
+    try {
+      const services = await retrieveSmsPoolRentalServices(id);
+      return {
+        queryType: type,
+        id,
+        name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
+        region: entry.region ? String(entry.region) : null,
+        serviceCount: services.length,
+        sampleServices: services.slice(0, 8).map((service) => String(service.name)),
+        metadata: scalarMetadata(entry),
+      };
+    } catch (cause) {
+      return {
+        queryType: type,
+        id,
+        name: String(entry.name ?? entry.country_name ?? entry.country ?? `Opção ${key}`),
+        region: entry.region ? String(entry.region) : null,
+        serviceCount: null,
+        sampleServices: [],
+        servicesError: cause instanceof Error ? cause.message : "RENTAL_SERVICES_FAILED",
+        metadata: scalarMetadata(entry),
+      };
+    }
+  }));
 }
 
 export async function GET(request: Request) {
@@ -28,10 +75,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [balanceResult, countries, services] = await Promise.all([
+    const [balanceResult, countries, services, rentalType0, rentalType1] = await Promise.all([
       retrieveSmsPoolBalance(),
       retrieveSmsPoolCountries(),
       retrieveSmsPoolServices(),
+      rentalDiagnostics(0),
+      rentalDiagnostics(1),
     ]);
 
     const preferredCountry = countries.find((item) => String(item.short_name).toUpperCase() === "BR") ?? countries[0];
@@ -69,6 +118,10 @@ export async function GET(request: Request) {
         } : null,
         samplePricingCount: pricing.length,
         sample,
+      },
+      rentalDiagnostics: {
+        type0: rentalType0,
+        type1: rentalType1,
       },
       safety: {
         purchasesEnabled: env.purchasesEnabled,
