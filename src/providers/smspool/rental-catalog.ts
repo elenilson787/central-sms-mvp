@@ -7,9 +7,9 @@ import {
   retrieveSmsPoolRentalServices,
   retrieveSmsPoolRentalStock,
   type SmsPoolRentalEntry,
-  type SmsPoolRentalList,
   type SmsPoolRentalService,
 } from "@/src/providers/smspool/client";
+import { normalizeRentalEntries, rentalPricingMap } from "@/src/providers/smspool/rental-normalize";
 
 export type SmsPoolRentalType = {
   id: string;
@@ -50,31 +50,6 @@ function numeric(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function parsePricing(value: unknown): Record<string, string | number> {
-  if (!value) return {};
-  if (typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, string | number>;
-  }
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, string | number>;
-      }
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function normalizeRentalList(payload: SmsPoolRentalList) {
-  if (Array.isArray(payload)) {
-    return payload.map((entry, index) => ({ key: String(entry.ID ?? entry.id ?? index), entry }));
-  }
-  return Object.entries(payload ?? {}).map(([key, entry]) => ({ key, entry }));
-}
-
 function rentalName(entry: SmsPoolRentalEntry, fallback: string) {
   return String(entry.name ?? entry.country_name ?? entry.country ?? fallback);
 }
@@ -93,8 +68,8 @@ function periodsFromPricing(pricing: Record<string, string | number>) {
 
 async function normalizedRentals() {
   const payload = await retrieveSmsPoolRentalIds(1);
-  return normalizeRentalList(payload).map(({ key, entry }) => {
-    const pricing = parsePricing(entry.pricing);
+  return normalizeRentalEntries(payload).map(({ key, entry }) => {
+    const pricing = rentalPricingMap({ pricing: entry.pricing as Record<string, string | number> | undefined });
     return {
       id: String(entry.ID ?? entry.id ?? key),
       name: rentalName(entry, `Opção ${key}`),
@@ -146,9 +121,9 @@ export async function getSmsPoolRentalDetails(rentalId: string): Promise<SmsPool
     retrieveSmsPoolRentalPricing(rentalId),
     retrieveSmsPoolRentalServices(rentalId),
   ]);
-  const pricing = Object.keys(pricingResponse.pricing ?? {}).length
-    ? pricingResponse.pricing ?? {}
-    : selected.embeddedPricing;
+
+  const livePricing = rentalPricingMap(pricingResponse);
+  const pricing = Object.keys(livePricing).length ? livePricing : selected.embeddedPricing;
 
   const plans = Object.entries(pricing)
     .map(([daysValue, priceValue]) => {
