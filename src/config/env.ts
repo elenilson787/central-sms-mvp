@@ -20,6 +20,7 @@ export const env = {
   fiveSimPriceCurrency: optional("FIVESIM_PRICE_CURRENCY") ?? "UNCONFIRMED",
   smsPoolApiKey: optional("SMSPOOL_API_KEY"),
   smsPoolCommercialApproved: optional("SMSPOOL_COMMERCIAL_APPROVED") === "true",
+  smsPoolWhatsAppWhitelistApproved: optional("SMSPOOL_WHATSAPP_WHITELIST_APPROVED") === "true",
   smsPoolPriceCurrency: optional("SMSPOOL_PRICE_CURRENCY") ?? "USD",
   markupPercent: Number(optional("DEFAULT_MARKUP_PERCENT") ?? "35"),
   markupFixedBrlCents: Number(optional("DEFAULT_MARKUP_FIXED_BRL_CENTS") ?? "50"),
