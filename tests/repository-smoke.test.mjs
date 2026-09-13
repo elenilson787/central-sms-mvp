@@ -96,7 +96,7 @@ test("live catalog cannot execute provider purchases", async () => {
 
   assert.match(page, /SmsPoolCatalogPanel/);
   assert.match(panel, /Compra ainda bloqueada/);
-  assert.match(panel, /nenhuma compra, reserva ou débito é executado/i);
+  assert.match(panel, /Quando a compra estiver liberada/);
   assert.match(catalogRoute, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
   assert.doesNotMatch(catalogRoute, /purchaseSmsPoolNumber/);
