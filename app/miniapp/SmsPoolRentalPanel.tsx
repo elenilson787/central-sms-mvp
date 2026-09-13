@@ -123,7 +123,7 @@ export default function SmsPoolRentalPanel() {
   useEffect(() => {
     if (!rentalId) return;
     void (async () => {
-      setDetailsLoading(true); setError(null); setDetails(null); setDays(null); setSelectedService(null); setQuote(null);
+      setDetailsLoading(true); setError(null); setDetails(null); setDays(null); setSelectedService(null); setSearch(""); setQuote(null);
       try {
         const payload = await requestCatalog(rentalId) as RentalDetailsPayload;
         setDetails(payload);
@@ -155,6 +155,12 @@ export default function SmsPoolRentalPanel() {
       .filter((service) => service.name.toLocaleLowerCase("pt-BR").includes(query))
       .slice(0, 30);
   }, [details, query]);
+
+  function chooseService(service: RentalService | null) {
+    setSelectedService(service);
+    setSearch(service?.name ?? "");
+    setQuote(null);
+  }
 
   async function checkAvailability() {
     const webApp = window.Telegram?.WebApp;
@@ -241,20 +247,33 @@ export default function SmsPoolRentalPanel() {
             }}>{item}</button>)}
           </div>
 
+          <label className={styles.fieldLabel} htmlFor="rental-service-select">Ou escolha na lista de serviços disponíveis</label>
+          <select
+            id="rental-service-select"
+            className={styles.select}
+            value={selectedService?.id ?? ""}
+            onChange={(event) => {
+              const service = details.services.find((item) => item.id === event.target.value) ?? null;
+              chooseService(service);
+            }}
+          >
+            <option value="">Selecione entre {details.services.length} serviços disponíveis nesta opção</option>
+            {details.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+          </select>
+          <span className={styles.helperText}>A lista mostra os apps e sites aceitos por este tipo de aluguel. O número específico só é atribuído quando a compra for liberada.</span>
+
           {query.length < 2 && <div className={styles.searchPrompt}>
-            <strong>Digite o app ou site que poderá pedir novos códigos</strong>
-            <span>O mesmo número ficará disponível durante o período contratado, sujeito às regras e à disponibilidade do serviço.</span>
+            <strong>Pesquise acima ou escolha diretamente na lista</strong>
+            <span>Assim você consegue ver quais serviços estão realmente disponíveis para esta opção de número.</span>
           </div>}
 
           {query.length >= 2 && <div className={styles.offerList}>
-            {!filteredServices.length && <div className={styles.empty}>Esse serviço não apareceu para esta opção de aluguel. Tente outra opção de número ou confira a escrita.</div>}
+            {!filteredServices.length && <div className={styles.empty}>Esse serviço não apareceu para esta opção de aluguel. Escolha um dos serviços disponíveis na lista ou tente outra opção de número.</div>}
             {filteredServices.map((service) => <button
               key={service.id}
               type="button"
               className={styles.secondaryButton}
-              onClick={() => {
-                setSelectedService(service); setSearch(service.name); setQuote(null);
-              }}
+              onClick={() => chooseService(service)}
             >
               {selectedService?.id === service.id ? "✓ " : ""}{service.name}
             </button>)}
