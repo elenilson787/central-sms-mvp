@@ -117,11 +117,40 @@ export default function TelegramMiniAppPage() {
         setError(cause instanceof Error ? cause.message : "Não foi possível abrir sua sessão.");
         webApp?.HapticFeedback?.notificationOccurred("error");
       } else {
-        console.error("MINIAPP_ACTIVATION_REFRESH_FAILED", cause);
+        console.error("MINIAPP_SESSION_REFRESH_FAILED", cause);
       }
     } finally {
       if (silent) setTrackingRefreshing(false);
       else setLoading(false);
+    }
+  }, []);
+
+  const refreshSessionSilently = useCallback(() => loadSession({ silent: true }), [loadSession]);
+
+  const refreshActivations = useCallback(async () => {
+    const webApp = window.Telegram?.WebApp;
+    if (!webApp?.initData) return;
+
+    setTrackingRefreshing(true);
+    try {
+      const response = await fetch("/api/telegram/miniapp/activations/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ initData: webApp.initData }),
+      });
+      const payload = await response.json() as { session?: MiniAppSession; error?: string };
+      if (!response.ok || !payload.session) {
+        if (payload.error === "TELEGRAM_INIT_DATA_EXPIRED") {
+          setError("Sua sessão do Telegram expirou. Feche e abra novamente a Central SMS pelo bot.");
+        }
+        throw new Error(payload.error ?? "ACTIVATION_REFRESH_FAILED");
+      }
+      setSession(payload.session);
+      setError(null);
+    } catch (cause) {
+      console.error("MINIAPP_ACTIVATION_REFRESH_FAILED", cause);
+    } finally {
+      setTrackingRefreshing(false);
     }
   }, []);
 
@@ -134,10 +163,10 @@ export default function TelegramMiniAppPage() {
   useEffect(() => {
     if (view !== "activations" || !hasLiveActivation) return;
     const timer = window.setInterval(() => {
-      void loadSession({ silent: true });
+      void refreshActivations();
     }, 10_000);
     return () => window.clearInterval(timer);
-  }, [view, hasLiveActivation, loadSession]);
+  }, [view, hasLiveActivation, refreshActivations]);
 
   function goCatalog() {
     setView("catalog");
@@ -164,7 +193,7 @@ export default function TelegramMiniAppPage() {
 
         <PixGlobalMonitor
           active={Boolean(session) && view !== "pix"}
-          onBalanceUpdated={() => loadSession()}
+          onBalanceUpdated={refreshSessionSilently}
           onOpenPix={() => setView("pix")}
         />
 
@@ -209,7 +238,7 @@ export default function TelegramMiniAppPage() {
 
         {session && view === "pix" && <>
           <PixRechargePanel
-            onBalanceUpdated={() => loadSession()}
+            onBalanceUpdated={refreshSessionSilently}
             onPaymentConfirmed={() => setView("home")}
           />
           <PixPaymentHistory refreshKey={session.wallet.balanceCents} />
@@ -227,14 +256,14 @@ export default function TelegramMiniAppPage() {
             currency={session.wallet.currency}
             autoRefreshActive={hasLiveActivation}
             refreshing={trackingRefreshing}
-            onRefresh={() => void loadSession({ silent: true })}
+            onRefresh={() => void refreshActivations()}
           />
-          <p className={styles.helper}>Exibimos até 20 ativações recentes. Enquanto houver um pedido aguardando número ou SMS, esta tela atualiza automaticamente a cada 10 segundos.</p>
+          <p className={styles.helper}>Exibimos até 20 ativações recentes. Enquanto houver um pedido aguardando número ou SMS, esta tela consulta o fornecedor automaticamente a cada 10 segundos.</p>
         </section>}
 
         <footer className={styles.footer}>
           Identidade validada no servidor pelo initData assinado do Telegram.<br />
-          Catálogo real conectado. Compras permanecem desativadas até validação comercial do provider.
+          Catálogo real conectado. Compras e serviços seguem protegidos pelas travas comerciais e pela política de allow-list.
         </footer>
       </div>
     </main>
