@@ -31,15 +31,19 @@ export type SmsPoolRentalServiceDto = {
   name: string;
 };
 
+export type SmsPoolRentalServiceMode = "GENERAL" | "SERVICE_SPECIFIC";
+
 export type SmsPoolRentalDetails = {
   rental: SmsPoolRentalType;
   plans: SmsPoolRentalPlan[];
   services: SmsPoolRentalServiceDto[];
+  serviceMode: SmsPoolRentalServiceMode;
 };
 
 export type SmsPoolRentalQuote = {
   rental: SmsPoolRentalType;
   service: SmsPoolRentalServiceDto | null;
+  serviceMode: SmsPoolRentalServiceMode;
   days: number;
   stock: number;
   salePriceCents: number | null;
@@ -142,6 +146,7 @@ export async function getSmsPoolRentalDetails(rentalId: string): Promise<SmsPool
     .filter((item): item is SmsPoolRentalPlan => Boolean(item))
     .sort((a, b) => a.days - b.days);
 
+  const serviceMode: SmsPoolRentalServiceMode = services.length > 0 ? "SERVICE_SPECIFIC" : "GENERAL";
   const visibleServices = services
     .map(serviceDto)
     .filter((service) => isSmsPoolCatalogServiceVisible(service.name))
@@ -156,6 +161,7 @@ export async function getSmsPoolRentalDetails(rentalId: string): Promise<SmsPool
     },
     plans,
     services: visibleServices,
+    serviceMode,
   };
 }
 
@@ -168,15 +174,20 @@ export async function quoteSmsPoolRental(input: {
   const plan = details.plans.find((item) => item.days === input.days);
   if (!plan) throw new Error("SMSPOOL_RENTAL_PERIOD_NOT_FOUND");
 
-  const service = input.serviceId
-    ? details.services.find((item) => item.id === input.serviceId) ?? null
-    : null;
-  if (input.serviceId && !service) throw new Error("SERVICE_BLOCKED_OR_NOT_AVAILABLE");
+  let service: SmsPoolRentalServiceDto | null = null;
+  if (details.serviceMode === "SERVICE_SPECIFIC") {
+    if (!input.serviceId) throw new Error("SERVICE_REQUIRED_FOR_RENTAL");
+    service = details.services.find((item) => item.id === input.serviceId) ?? null;
+    if (!service) throw new Error("SERVICE_BLOCKED_OR_NOT_AVAILABLE");
+  } else if (input.serviceId) {
+    throw new Error("SERVICE_NOT_APPLICABLE_FOR_RENTAL");
+  }
 
   const stock = await retrieveSmsPoolRentalStock(input.rentalId, input.days);
   return {
     rental: details.rental,
     service,
+    serviceMode: details.serviceMode,
     days: input.days,
     stock: Math.max(0, Math.trunc(numeric(stock.count))),
     salePriceCents: plan.salePriceCents,
