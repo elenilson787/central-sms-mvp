@@ -3,6 +3,17 @@
 import { useEffect, useState } from "react";
 import styles from "../../admin.module.css";
 
+type RentalDiagnosticRow = {
+  queryType: 0 | 1;
+  id: string;
+  name: string;
+  region: string | null;
+  serviceCount: number | null;
+  sampleServices: string[];
+  servicesError?: string;
+  metadata: Record<string, string | number | boolean | null>;
+};
+
 type Diagnostic = {
   ok: boolean;
   provider: string;
@@ -25,6 +36,10 @@ type Diagnostic = {
       providerCurrency: string;
     }>;
   };
+  rentalDiagnostics?: {
+    type0: RentalDiagnosticRow[];
+    type1: RentalDiagnosticRow[];
+  };
   safety?: {
     purchasesEnabled: boolean;
     commercialApproved: boolean;
@@ -36,6 +51,23 @@ type Diagnostic = {
 function money(value: number | null | undefined, currency = "USD") {
   if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
+}
+
+function RentalTable({ title, rows }: { title: string; rows: RentalDiagnosticRow[] }) {
+  return <>
+    <h3>{title}</h3>
+    <table className={styles.table}><thead><tr><th>ID</th><th>Nome</th><th>Região</th><th>Serviços</th><th>Amostra</th><th>Metadados</th></tr></thead><tbody>
+      {rows.map((row) => <tr key={`${row.queryType}-${row.id}`}>
+        <td>{row.id}</td>
+        <td>{row.name}</td>
+        <td>{row.region ?? "—"}</td>
+        <td>{row.serviceCount === null ? "erro" : row.serviceCount}</td>
+        <td>{row.sampleServices.length ? row.sampleServices.join(", ") : row.servicesError ? row.servicesError : "—"}</td>
+        <td><code>{JSON.stringify(row.metadata)}</code></td>
+      </tr>)}
+      {!rows.length && <tr><td colSpan={6} className={styles.muted}>Nenhuma opção retornada.</td></tr>}
+    </tbody></table>
+  </>;
 }
 
 export default function SmsPoolAdminPage() {
@@ -104,6 +136,13 @@ export default function SmsPoolAdminPage() {
           <div><strong>Compra real liberada</strong><br /><span className={styles.badge}>{String(data.safety?.livePurchasesAllowed)}</span></div>
         </div>
         <p className={styles.muted}>Enquanto a aprovação comercial não chegar por escrito, o resultado correto é compra real = false.</p>
+      </section>
+
+      <section className={styles.card}>
+        <h2>Diagnóstico Rental</h2>
+        <p className={styles.muted}>Compara as respostas reais de <code>retrieve_all</code> com type=0 e type=1 e conta os serviços devolvidos por cada opção. Isso serve para distinguir opções por serviço de opções Always On antes de alterarmos a experiência do cliente.</p>
+        <RentalTable title="Rental type=0" rows={data.rentalDiagnostics?.type0 ?? []} />
+        <RentalTable title="Rental type=1" rows={data.rentalDiagnostics?.type1 ?? []} />
       </section>
 
       <section className={styles.card}>
