@@ -87,7 +87,7 @@ test("PIX payer PII is not inserted into local payments table", async () => {
   assert.match(pixRoute, /createPixOrder/);
 });
 
-test("live SMSPool catalog cannot execute provider purchases", async () => {
+test("live catalog cannot execute provider purchases", async () => {
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
   const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
@@ -104,9 +104,11 @@ test("live SMSPool catalog cannot execute provider purchases", async () => {
   assert.doesNotMatch(catalog, /purchaseSmsPoolNumber/);
 });
 
-test("live catalog pricing is calculated server-side and markup internals stay off the client", async () => {
+test("live catalog pricing is calculated server-side and provider costs stay off the customer API", async () => {
   const pricing = await readFile(new URL("../src/pricing/quote.ts", import.meta.url), "utf8");
   const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
+  const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
+  const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/quote/route.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
 
   assert.match(pricing, /markupPercent/);
@@ -115,8 +117,15 @@ test("live catalog pricing is calculated server-side and markup internals stay o
   assert.match(catalog, /quoteOffer/);
   assert.match(panel, /Preço final/);
   assert.match(panel, /salePriceCents/);
+  assert.match(panel, /Preço em configuração/);
+  assert.doesNotMatch(panel, /providerPrice/);
+  assert.doesNotMatch(panel, /providerCurrency/);
+  assert.doesNotMatch(panel, /PROVIDER_TO_BRL_RATE/);
   assert.doesNotMatch(panel, /DEFAULT_MARKUP_PERCENT/);
   assert.doesNotMatch(panel, /DEFAULT_MARKUP_FIXED_BRL_CENTS/);
-  assert.doesNotMatch(panel, /PROVIDER_TO_BRL_RATE/);
   assert.doesNotMatch(panel, /Markup:/);
+  assert.doesNotMatch(catalogRoute, /providerPrice:/);
+  assert.doesNotMatch(catalogRoute, /providerCurrency:/);
+  assert.doesNotMatch(quoteRoute, /providerPrice:/);
+  assert.doesNotMatch(quoteRoute, /providerCurrency:/);
 });
