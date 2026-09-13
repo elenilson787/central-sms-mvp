@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "TELEGRAM_BOT_TOKEN_NOT_CONFIGURED" }, { status: 503 });
   }
   if (!env.smsPoolApiKey) {
-    return Response.json({ error: "SMSPOOL_API_KEY_NOT_CONFIGURED" }, { status: 503 });
+    return Response.json({ error: "CATALOG_PROVIDER_NOT_CONFIGURED" }, { status: 503 });
   }
 
   let body: { initData?: string; offerId?: string };
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       maxAgeSeconds: 3600,
     });
     const allowed = await consumeRateLimit({
-      scope: "miniapp-smspool-quote",
+      scope: "miniapp-live-catalog-quote",
       key: validated.user.id,
       limit: 30,
       windowSeconds: 60,
@@ -41,39 +41,38 @@ export async function POST(request: Request) {
       ok: true,
       mode: "live-readonly",
       purchaseExecutionEnabled: false,
-      blockedReason: !env.smsPoolCommercialApproved
-        ? "SMSPOOL_COMMERCIAL_APPROVAL_REQUIRED"
-        : !env.purchasesEnabled
-          ? "PURCHASES_DISABLED"
-          : "READ_ONLY_CATALOG_STAGE",
+      blockedReason: "PURCHASE_NOT_AVAILABLE",
       canAfford: quote.salePriceCents !== null
         ? session.wallet.balanceCents >= quote.salePriceCents
         : null,
       walletBalanceCents: session.wallet.balanceCents,
-      offer: quote.offer,
+      offer: {
+        id: quote.offer.id,
+        country: quote.offer.country,
+        countryName: quote.offer.countryName,
+        product: quote.offer.product,
+        label: quote.offer.label,
+        description: quote.offer.description,
+        kind: quote.offer.kind,
+        stock: quote.stock,
+        salePriceCents: quote.salePriceCents,
+        currency: "BRL",
+        pricingConfigured: quote.pricingConfigured,
+      },
       availability: {
         stock: quote.stock,
         successRate: quote.successRate ?? null,
-      },
-      providerPrice: {
-        value: quote.providerPrice,
-        currency: quote.providerCurrency,
       },
       price: {
         configured: quote.pricingConfigured,
         salePriceCents: quote.salePriceCents,
         currency: "BRL",
       },
-      safety: {
-        purchasesEnabled: env.purchasesEnabled,
-        commercialApproved: env.smsPoolCommercialApproved,
-        livePurchasesAllowed: Boolean(env.purchasesEnabled && env.smsPoolCommercialApproved && env.smsPoolApiKey),
-      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
-    console.error("[miniapp-smspool-quote] failed", { message });
-    return Response.json({ error: message.startsWith("SMSPOOL_") ? message : "SMSPOOL_QUOTE_FAILED" }, { status: 502 });
+    console.error("[miniapp-live-catalog-quote] failed", { message });
+    return Response.json({ error: "CATALOG_QUOTE_FAILED" }, { status: 502 });
   }
 }
