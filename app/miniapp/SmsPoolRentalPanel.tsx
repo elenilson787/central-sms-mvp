@@ -128,7 +128,6 @@ export default function SmsPoolRentalPanel() {
         const payload = await requestCatalog(rentalId) as RentalDetailsPayload;
         setDetails(payload);
         setDays(payload.plans[0]?.days ?? null);
-        smoothScroll(periodRef.current);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Não foi possível carregar esta opção de aluguel.");
       } finally {
@@ -136,6 +135,18 @@ export default function SmsPoolRentalPanel() {
       }
     })();
   }, [rentalId]);
+
+  useEffect(() => {
+    if (details) smoothScroll(periodRef.current);
+  }, [details]);
+
+  useEffect(() => {
+    if (selectedService) smoothScroll(actionRef.current);
+  }, [selectedService]);
+
+  useEffect(() => {
+    if (quote) smoothScroll(quoteRef.current);
+  }, [quote]);
 
   const query = search.trim().toLocaleLowerCase("pt-BR");
   const filteredServices = useMemo(() => {
@@ -165,7 +176,6 @@ export default function SmsPoolRentalPanel() {
         throw new Error((payload as { error?: string }).error ?? "RENTAL_QUOTE_FAILED");
       }
       setQuote(payload as RentalQuotePayload);
-      smoothScroll(quoteRef.current);
     } catch (cause) {
       popup("Não foi possível consultar", cause instanceof Error ? cause.message : "Falha ao consultar aluguel.");
     } finally {
@@ -243,7 +253,7 @@ export default function SmsPoolRentalPanel() {
               type="button"
               className={styles.secondaryButton}
               onClick={() => {
-                setSelectedService(service); setSearch(service.name); setQuote(null); smoothScroll(actionRef.current);
+                setSelectedService(service); setSearch(service.name); setQuote(null);
               }}
             >
               {selectedService?.id === service.id ? "✓ " : ""}{service.name}
