@@ -15,11 +15,22 @@ test("Mini App live catalog is authenticated, read-only and white-labeled", asyn
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
   assert.doesNotMatch(quoteRoute, /purchaseSmsPoolNumber/);
 
-  assert.match(panel, /Catálogo real conectado/);
+  assert.match(panel, /Para qual app ou site você precisa de um número/);
+  assert.match(panel, /Serviço que você quer ativar/);
+  assert.match(panel, /Número para \{offer\.label\}/);
   assert.match(panel, /Compra ainda bloqueada/);
   assert.doesNotMatch(panel, /Simular confirmação/);
   assert.doesNotMatch(panel, /SMSPool/);
   assert.doesNotMatch(panel, /providerPrice/);
+});
+
+test("Mini App catalog avoids overwhelming the user with the full provider list before search", async () => {
+  const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+
+  assert.match(panel, /if \(query\.length < 2\) return \[\]/);
+  assert.match(panel, /Comece digitando o nome do app ou site/);
+  assert.match(panel, /Ex\.: YouTube, Discord, Steam/);
+  assert.match(panel, /Não encontramos esse serviço neste país/);
 });
 
 test("SMSPool catalog uses real provider pricing and stock reads without purchase", async () => {
