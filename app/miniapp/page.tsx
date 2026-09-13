@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ActivationTracking from "./ActivationTracking";
+import { activationCountryName, activationProductName } from "./activation-display";
 import PixGlobalMonitor from "./PixGlobalMonitor";
 import PixPaymentHistory from "./PixPaymentHistory";
 import PixRechargePanel from "./PixRechargePanel";
@@ -16,6 +17,7 @@ type Activation = {
   kind: NumberKind;
   country: string;
   product: string;
+  productLabel?: string;
   phone?: string;
   status: string;
   salePriceCents: number;
@@ -272,16 +274,20 @@ export default function TelegramMiniAppPage() {
 
 function ActivationList({ activations, currency, compact = false }: { activations: Activation[]; currency: string; compact?: boolean }) {
   if (!activations.length) return <div className={styles.empty}>Você ainda não possui ativações.</div>;
-  return <div className={styles.list}>{activations.map((activation) => <article className={styles.item} key={activation.id}>
-    <div className={styles.itemTop}>
-      <span className={styles.itemTitle}>{activation.kind === "TEMPORARY_HOSTING" ? "🗓" : "📱"} {kindLabel(activation.kind)}</span>
-      <span className={styles.itemStatus}>{statusLabel(activation.status)}</span>
-    </div>
-    <div className={styles.itemMeta}>
-      <strong>{activation.country} · {activation.product}</strong><br />
-      {activation.phone ? `Número: ${activation.phone}` : "Número ainda não atribuído"}<br />
-      {formatMoney(activation.salePriceCents, currency)} · criada em {formatDate(activation.createdAt)}
-      {!compact && activation.expiresAt && <><br />Expira em {formatDate(activation.expiresAt)}</>}
-    </div>
-  </article>)}</div>;
+  return <div className={styles.list}>{activations.map((activation) => {
+    const serviceName = activationProductName(activation.product, activation.productLabel);
+    const countryName = activationCountryName(activation.country);
+    return <article className={styles.item} key={activation.id}>
+      <div className={styles.itemTop}>
+        <span className={styles.itemTitle}>{activation.kind === "TEMPORARY_HOSTING" ? "🗓" : "📱"} {kindLabel(activation.kind)}</span>
+        <span className={styles.itemStatus}>{statusLabel(activation.status)}</span>
+      </div>
+      <div className={styles.itemMeta}>
+        <strong>{countryName} · {serviceName}</strong><br />
+        {activation.phone ? `Número: ${activation.phone}` : "Número ainda não atribuído"}<br />
+        {formatMoney(activation.salePriceCents, currency)} · criada em {formatDate(activation.createdAt)}
+        {!compact && activation.expiresAt && <><br />Expira em {formatDate(activation.expiresAt)}</>}
+      </div>
+    </article>;
+  })}</div>;
 }
