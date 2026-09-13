@@ -25,10 +25,49 @@ type AdminUser = {
   recentActivations?: Array<{ id: string; provider: string; country: string; product: string; status: string; created_at: string }>;
 };
 
+type TestPurchasePreview = {
+  offer: {
+    id: string;
+    label: string;
+    country: string;
+    countryName: string;
+    operator: string;
+    product: string;
+    providerPrice: number;
+    providerCurrency: string;
+  };
+  price: { salePriceCents: number | null; currency: string };
+  stock: number;
+  successRate: number | null;
+  walletBalanceCents: number;
+  projectedBalanceCents: number | null;
+  policy: { serviceAllowed: boolean; blockReason: string | null };
+  safety: { purchasesEnabled: boolean; commercialApproved: boolean; apiConfigured: boolean };
+  canExecute: boolean;
+  blockers: string[];
+};
+
+type TestPurchaseResponse = {
+  ok?: boolean;
+  mode?: "preview" | "executed";
+  preview?: TestPurchasePreview;
+  activation?: {
+    id?: string;
+    phone?: string | null;
+    status?: string;
+    external_activation_id?: string | null;
+  };
+  error?: string;
+};
+
 type PaymentFilter = "production" | "test" | "all";
 
-function money(cents?: number) {
+function money(cents?: number | null) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(cents ?? 0) / 100);
+}
+
+function providerMoney(value: number, currency: string) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
 }
 
 function date(value?: string | null) {
@@ -96,6 +135,77 @@ export default function AdminPage() {
     } finally { setBusy(false); }
   }
 
+  async function runControlledTestPurchase(user: AdminUser) {
+    if (!token) return;
+    setBusy(true); setError(null); setMessage(null);
+
+    try {
+      const previewResponse = await fetch("/api/admin/activations/test-purchase", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "preview", userId: user.id }),
+      });
+      const previewPayload = await previewResponse.json() as TestPurchaseResponse;
+      if (!previewResponse.ok || !previewPayload.ok || !previewPayload.preview) {
+        throw new Error(previewPayload.error ?? "Falha ao consultar a compra de teste");
+      }
+
+      const preview = previewPayload.preview;
+      if (!preview.canExecute) {
+        const details = preview.blockers.length ? preview.blockers.join(", ") : "TEST_PURCHASE_NOT_READY";
+        throw new Error(`Compra teste bloqueada: ${details}`);
+      }
+
+      const salePrice = money(preview.price.salePriceCents);
+      const providerPrice = providerMoney(preview.offer.providerPrice, preview.offer.providerCurrency);
+      const projected = money(preview.projectedBalanceCents);
+      const confirmation = window.confirm(
+        `COMPRA REAL DE TESTE\n\n` +
+        `Usuário: ${user.first_name ?? user.username ?? user.telegram_user_id}\n` +
+        `Serviço: ${preview.offer.label}\n` +
+        `País: ${preview.offer.countryName}\n` +
+        `Preço para a carteira: ${salePrice}\n` +
+        `Custo atual no SMSPool: ${providerPrice}\n` +
+        `Estoque: ${preview.stock}\n` +
+        `Saldo após a compra: ${projected}\n\n` +
+        `Será comprado EXATAMENTE 1 número real. Deseja continuar?`,
+      );
+      if (!confirmation) {
+        setMessage("Compra de teste cancelada antes de qualquer débito.");
+        return;
+      }
+
+      const idempotencyKey = `admin-test:${user.id}:${crypto.randomUUID()}`;
+      const executeResponse = await fetch("/api/admin/activations/test-purchase", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "execute",
+          userId: user.id,
+          idempotencyKey,
+          confirmation: "BUY_ONE_REAL_YOUTUBE_BR",
+        }),
+      });
+      const executePayload = await executeResponse.json() as TestPurchaseResponse;
+      if (!executeResponse.ok || !executePayload.ok || !executePayload.activation) {
+        throw new Error(executePayload.error ?? "Falha na compra real de teste");
+      }
+
+      const activation = executePayload.activation;
+      await searchUsers();
+      setMessage(
+        `Compra real de teste criada com sucesso. ` +
+        `Status: ${activation.status ?? "—"}. ` +
+        `Número: ${activation.phone ?? "aguardando atribuição"}. ` +
+        `Ativação: ${activation.id ?? "—"}.`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha na compra real de teste");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <main className={styles.page}><div className={styles.wrap}>
     <h1 className={styles.title}>Central SMS — Administração</h1>
     <p className={styles.muted}>Console operacional. O token fica somente na sessão desta aba e nunca deve ser compartilhado.</p>
@@ -120,6 +230,16 @@ export default function AdminPage() {
           <div><strong>Status</strong><br /><span className={styles.badge}>{user.status}</span></div>
         </div>
 
+        <div className={styles.testPurchase}>
+          <div>
+            <strong>🧪 Compra real controlada</strong>
+            <p>Consulta novamente preço, estoque, saldo e política. Só depois de uma confirmação explícita compra 1 número real de YouTube/Brasil para este usuário.</p>
+          </div>
+          <button className={`${styles.button} ${styles.testButton}`} disabled={busy || !token} onClick={() => void runControlledTestPurchase(user)}>
+            {busy ? "Aguarde…" : "Testar 1 ativação real"}
+          </button>
+        </div>
+
         <div className={styles.row}>
           <h3 style={{ marginRight: "auto" }}>Recargas recentes</h3>
           <button className={styles.button} disabled={paymentFilter === "production"} onClick={() => setPaymentFilter("production")}>Produção</button>
@@ -136,6 +256,7 @@ export default function AdminPage() {
         <h3>Ativações recentes</h3>
         <table className={styles.table}><thead><tr><th>Serviço</th><th>País</th><th>Status</th><th>Data</th></tr></thead><tbody>
           {(user.recentActivations ?? []).map((activation) => <tr key={activation.id}><td>{activation.product}</td><td>{activation.country}</td><td>{activation.status}</td><td>{date(activation.created_at)}</td></tr>)}
+          {!(user.recentActivations ?? []).length && <tr><td colSpan={4} className={styles.muted}>Nenhuma ativação ainda.</td></tr>}
         </tbody></table>
       </section>;
     })}
