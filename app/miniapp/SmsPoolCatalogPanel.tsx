@@ -140,6 +140,38 @@ export default function SmsPoolCatalogPanel() {
   }
 
   return <section className={styles.catalogSection}>
+    <div className={styles.offerList}>
+      <article className={styles.offerCard}>
+        <div className={styles.offerTop}>
+          <div>
+            <span className={styles.demoBadge}>DISPONÍVEL</span>
+            <h3>⚡ Ativação única</h3>
+            <p>Receba um código SMS agora</p>
+          </div>
+        </div>
+        <p className={styles.offerDescription}>
+          Ideal quando você precisa receber um código de verificação uma única vez. O número é temporário e não fica reservado permanentemente para você.
+        </p>
+      </article>
+
+      <article className={styles.offerCard}>
+        <div className={styles.offerTop}>
+          <div>
+            <span className={styles.badge}>EM INTEGRAÇÃO</span>
+            <h3>🗓️ Manter número por mais tempo</h3>
+            <p>Para receber códigos futuros e manter acesso ao mesmo número</p>
+          </div>
+        </div>
+        <p className={styles.offerDescription}>
+          Indicado para contas que podem pedir nova verificação, recuperação de acesso ou login em outro aparelho. O catálogo de aluguel longo será conectado separadamente.
+        </p>
+      </article>
+    </div>
+
+    <div className={styles.warnNotice}>
+      <strong>Atenção sobre ativação única:</strong> depois que o pedido expirar, você pode perder o acesso ao número. Se o app pedir outro código no futuro, talvez não seja possível recebê-lo. Para contas que você pretende manter, prefira aluguel longo quando essa opção estiver disponível.
+    </div>
+
     <div className={styles.catalogGuide}>
       <div className={styles.guideIcon}>🔎</div>
       <div>
@@ -192,7 +224,7 @@ export default function SmsPoolCatalogPanel() {
         {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
           <div className={styles.offerTop}>
             <div>
-              <span className={styles.demoBadge}>AO VIVO</span>
+              <span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span>
               <h3>Número para {offer.label}</h3>
               <p>{offer.countryName} · SMS de verificação</p>
             </div>
@@ -200,7 +232,7 @@ export default function SmsPoolCatalogPanel() {
               {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
             </div>
           </div>
-          <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra.</p>
+          <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra e não deve ser tratado como um número permanente.</p>
           <div className={styles.offerMeta}>
             <span>País: {offer.countryName}</span>
             <span>Disponibilidade: consultar</span>
@@ -214,7 +246,7 @@ export default function SmsPoolCatalogPanel() {
       <section className={styles.modal} role="dialog" aria-modal="true" aria-label={`Número para ${selectedOffer.label}`} onClick={(event) => event.stopPropagation()}>
         <div className={styles.modalHandle} />
         <div className={styles.modalHeader}>
-          <div><span className={styles.demoBadge}>CATÁLOGO REAL</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
+          <div><span className={styles.demoBadge}>ATIVAÇÃO ÚNICA</span><h2>Número para {selectedOffer.label}</h2><p>{selectedOffer.countryName} · SMS de verificação</p></div>
           <button className={styles.close} type="button" onClick={() => { setSelectedOffer(null); setQuote(null); }}>×</button>
         </div>
 
@@ -229,6 +261,10 @@ export default function SmsPoolCatalogPanel() {
 
           <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
             {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
+          </div>
+
+          <div className={styles.warnNotice}>
+            Este número é de ativação temporária. Depois que o pedido expirar, ele não fica reservado para você. Se precisar receber outro código no futuro, prefira a modalidade de aluguel longo quando disponível.
           </div>
 
           <p className={styles.modalText}>
