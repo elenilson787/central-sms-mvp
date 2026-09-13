@@ -47,6 +47,37 @@ export type SmsPoolStock = {
   message?: string;
 };
 
+export type SmsPoolRentalEntry = {
+  ID?: string | number;
+  id?: string | number;
+  name?: string;
+  region?: string;
+  country?: string;
+  country_name?: string;
+  short_name?: string;
+  pricing?: string | Record<string, string | number>;
+  [key: string]: unknown;
+};
+
+export type SmsPoolRentalList = SmsPoolRentalEntry[] | Record<string, SmsPoolRentalEntry>;
+
+export type SmsPoolRentalService = {
+  ID: string | number;
+  name: string;
+  pool?: string | number;
+};
+
+export type SmsPoolRentalPricing = {
+  pricing?: Record<string, string | number>;
+  extend?: Record<string, string | number>;
+};
+
+export type SmsPoolRentalStock = {
+  success: number;
+  count: number;
+  message?: string;
+};
+
 export type SmsPoolPurchase = {
   success: number;
   number: string | number;
@@ -192,6 +223,34 @@ export async function retrieveSmsPoolStock(input: {
 
 export async function retrieveSmsPoolBalance() {
   return smsPoolRequest<{ balance: string | number }>("/request/balance", { authenticated: true });
+}
+
+export async function retrieveSmsPoolRentalIds(type: 0 | 1 = 1) {
+  return smsPoolRequest<SmsPoolRentalList>("/rental/retrieve_all", {
+    authenticated: true,
+    fields: { type },
+  });
+}
+
+export async function retrieveSmsPoolRentalServices(rentalId: string | number) {
+  return smsPoolRequest<SmsPoolRentalService[]>("/rental/retrieve_services", {
+    authenticated: true,
+    fields: { rental: rentalId },
+  });
+}
+
+export async function retrieveSmsPoolRentalPricing(rentalId: string | number) {
+  return smsPoolRequest<SmsPoolRentalPricing>("/rental/retrieve_pricing", {
+    authenticated: true,
+    fields: { id: rentalId },
+  });
+}
+
+export async function retrieveSmsPoolRentalStock(rentalId: string | number, days: number) {
+  return smsPoolRequest<SmsPoolRentalStock>("/rental/stock", {
+    authenticated: true,
+    fields: { id: rentalId, days },
+  });
 }
 
 export async function purchaseSmsPoolNumber(input: {
