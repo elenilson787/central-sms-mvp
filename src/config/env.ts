@@ -18,6 +18,9 @@ export const env = {
   supabaseSecretKey: optional("SUPABASE_SECRET_KEY"),
   fiveSimToken: optional("FIVESIM_TOKEN"),
   fiveSimPriceCurrency: optional("FIVESIM_PRICE_CURRENCY") ?? "UNCONFIRMED",
+  smsPoolApiKey: optional("SMSPOOL_API_KEY"),
+  smsPoolCommercialApproved: optional("SMSPOOL_COMMERCIAL_APPROVED") === "true",
+  smsPoolPriceCurrency: optional("SMSPOOL_PRICE_CURRENCY") ?? "USD",
   markupPercent: Number(optional("DEFAULT_MARKUP_PERCENT") ?? "30"),
   markupFixedBrlCents: Number(optional("DEFAULT_MARKUP_FIXED_BRL_CENTS") ?? "20"),
   providerToBrlRate: optional("PROVIDER_TO_BRL_RATE") ? Number(optional("PROVIDER_TO_BRL_RATE")) : undefined,
@@ -29,4 +32,11 @@ export const env = {
 export function requirePurchaseConfiguration() {
   if (!env.purchasesEnabled) throw new Error("PURCHASES_DISABLED");
   throw new Error("LIVE_PROVIDER_OPERATIONS_NOT_ENABLED_IN_BOOTSTRAP");
+}
+
+export function requireSmsPoolPurchaseConfiguration() {
+  if (!env.purchasesEnabled) throw new Error("PURCHASES_DISABLED");
+  if (!env.smsPoolCommercialApproved) throw new Error("SMSPOOL_COMMERCIAL_APPROVAL_REQUIRED");
+  if (!env.smsPoolApiKey) throw new Error("SMSPOOL_API_KEY_NOT_CONFIGURED");
+  return env.smsPoolApiKey;
 }
