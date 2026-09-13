@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
+import { resolveSmsPoolServiceLabels } from "@/src/providers/smspool/service-labels";
 import type { TelegramMiniAppUser } from "@/src/telegram/miniapp-auth";
 
 export type MiniAppSession = {
@@ -18,6 +19,7 @@ export type MiniAppSession = {
     kind: "ONE_TIME_SMS" | "TEMPORARY_HOSTING";
     country: string;
     product: string;
+    productLabel?: string;
     phone?: string;
     status: string;
     salePriceCents: number;
@@ -82,12 +84,18 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
 
   const { data: activations, error: activationsError } = await supabase
     .from("activations")
-    .select("id,kind,country,product,phone,status,sale_price_cents,created_at,updated_at,expires_at,sms_code,sms_text")
+    .select("id,provider,kind,country,product,phone,status,sale_price_cents,created_at,updated_at,expires_at,sms_code,sms_text")
     .eq("user_id", appUser.id)
     .order("created_at", { ascending: false })
     .limit(20);
 
   if (activationsError) throw new Error(`MINIAPP_ACTIVATIONS_READ_FAILED:${activationsError.message}`);
+
+  const activationRows = activations ?? [];
+  const smsPoolProductIds = activationRows
+    .filter((activation) => activation.provider === "smspool")
+    .map((activation) => String(activation.product));
+  const serviceLabels = await resolveSmsPoolServiceLabels(smsPoolProductIds);
 
   return {
     user: {
@@ -101,11 +109,14 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
       balanceCents: Number(wallet.balance_cents),
       currency: wallet.currency,
     },
-    recentActivations: (activations ?? []).map((activation) => ({
+    recentActivations: activationRows.map((activation) => ({
       id: activation.id,
       kind: activation.kind,
       country: activation.country,
       product: activation.product,
+      productLabel: activation.provider === "smspool"
+        ? serviceLabels.get(String(activation.product))
+        : undefined,
       phone: activation.phone ?? undefined,
       status: activation.status,
       salePriceCents: Number(activation.sale_price_cents),
