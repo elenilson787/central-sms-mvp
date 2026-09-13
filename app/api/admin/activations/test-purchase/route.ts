@@ -60,6 +60,7 @@ async function buildPreview(userId: string) {
       id: offer.id,
       label: offer.label,
       country: offer.country,
+      countryId: offer.countryId,
       countryName: offer.countryName,
       operator: offer.operator,
       product: offer.product,
@@ -203,7 +204,9 @@ export async function POST(request: Request) {
     const activation = await purchaseActivation({
       userId,
       provider: "smspool",
-      country: preview.offer.country,
+      // purchaseActivation rebuilds the SMSPool offer id. It must receive the
+      // provider's canonical numeric country id, not the public short code (BR).
+      country: preview.offer.countryId,
       operator: preview.offer.operator,
       product: preview.offer.product,
       kind: "ONE_TIME_SMS",
@@ -229,6 +232,7 @@ export async function POST(request: Request) {
       "INSUFFICIENT_BALANCE",
       "PRICING_NOT_CONFIGURED",
       "YOUTUBE_BR_OFFER_NOT_FOUND",
+      "SMSPOOL_OFFER_NOT_FOUND",
     ].some((code) => message.includes(code));
 
     return Response.json({ ok: false, error: message }, { status: expected ? 409 : 502 });
