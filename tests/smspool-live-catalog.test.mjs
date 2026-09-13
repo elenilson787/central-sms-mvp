@@ -33,6 +33,17 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
   assert.match(panel, /Não encontramos esse serviço neste país/);
 });
 
+test("Mini App explains one-time activation versus long-term number use", async () => {
+  const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+
+  assert.match(panel, /Ativação única/);
+  assert.match(panel, /Manter número por mais tempo/);
+  assert.match(panel, /EM INTEGRAÇÃO/);
+  assert.match(panel, /não fica reservado permanentemente/);
+  assert.match(panel, /Se o app pedir outro código no futuro/);
+  assert.match(panel, /modalidade de aluguel longo/);
+});
+
 test("SMSPool catalog uses real provider pricing and stock reads without purchase", async () => {
   const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
 
