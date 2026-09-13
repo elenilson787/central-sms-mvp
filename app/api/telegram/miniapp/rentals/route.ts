@@ -40,6 +40,7 @@ export async function POST(request: Request) {
         rental: details.rental,
         plans: details.plans,
         services: details.services,
+        serviceMode: details.serviceMode,
       });
     }
 
