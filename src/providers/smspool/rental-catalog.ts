@@ -1,5 +1,5 @@
 import { env } from "@/src/config/env";
-import { quoteOffer } from "@/src/pricing/quote";
+import { quoteRentalOffer } from "@/src/pricing/quote";
 import type { Offer } from "@/src/providers/types";
 import {
   retrieveSmsPoolRentalIds,
@@ -93,7 +93,7 @@ function salePrice(providerPrice: number, rentalId: string, days: number) {
   };
 
   try {
-    return quoteOffer(offer).salePriceCents;
+    return quoteRentalOffer(offer).salePriceCents;
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "";
     if (message === "PROVIDER_TO_BRL_RATE_NOT_CONFIGURED") return null;

@@ -73,7 +73,8 @@ test("long-term rental catalog is read-only and uses rental pricing, services an
   assert.doesNotMatch(client, /purchase_rental/);
 
   assert.match(catalog, /kind: "TEMPORARY_HOSTING"/);
-  assert.match(catalog, /quoteOffer/);
+  assert.match(catalog, /quoteRentalOffer/);
+  assert.doesNotMatch(catalog, /quoteOffer\(offer\)/);
   assert.match(route, /purchaseExecutionEnabled: false/);
   assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
   assert.doesNotMatch(route, /\/rental\/order|purchaseSmsPoolNumber|purchase_rental/);
