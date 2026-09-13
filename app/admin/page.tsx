@@ -49,7 +49,7 @@ type TestPurchasePreview = {
 
 type TestPurchaseResponse = {
   ok?: boolean;
-  mode?: "preview" | "executed";
+  mode?: "preview" | "policy_approved" | "executed";
   preview?: TestPurchasePreview;
   activation?: {
     id?: string;
@@ -152,6 +152,43 @@ export default function AdminPage() {
 
       const preview = previewPayload.preview;
       if (!preview.canExecute) {
+        const onlyPolicyBlock = preview.blockers.length === 1
+          && preview.policy.blockReason?.includes("SERVICE_NOT_APPROVED_FOR_SALE");
+
+        if (onlyPolicyBlock) {
+          const approve = window.confirm(
+            `APROVAR YOUTUBE PARA O TESTE\n\n` +
+            `Serviço: ${preview.offer.label}\n` +
+            `Service ID do SMSPool: ${preview.offer.product}\n` +
+            `País do teste: ${preview.offer.countryName}\n\n` +
+            `Esta ação habilita SOMENTE este service ID do YouTube na allow-list da Central SMS, ` +
+            `na categoria standard. Nenhum número será comprado nesta etapa.\n\n` +
+            `Deseja aprovar este serviço?`,
+          );
+
+          if (!approve) {
+            setMessage("Aprovação do YouTube cancelada. Nenhuma compra foi feita.");
+            return;
+          }
+
+          const approvalResponse = await fetch("/api/admin/activations/test-purchase", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              action: "approve_service",
+              userId: user.id,
+              confirmation: "APPROVE_YOUTUBE_BR_STANDARD",
+            }),
+          });
+          const approvalPayload = await approvalResponse.json() as TestPurchaseResponse;
+          if (!approvalResponse.ok || !approvalPayload.ok) {
+            throw new Error(approvalPayload.error ?? "Falha ao aprovar YouTube para o teste");
+          }
+
+          setMessage("YouTube aprovado na allow-list como serviço standard. Nenhuma compra foi feita. Clique novamente em ‘Testar 1 ativação real’ para revisar preço e confirmar a compra.");
+          return;
+        }
+
         const details = preview.blockers.length ? preview.blockers.join(", ") : "TEST_PURCHASE_NOT_READY";
         throw new Error(`Compra teste bloqueada: ${details}`);
       }
