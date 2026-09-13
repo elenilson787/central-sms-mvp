@@ -1,3 +1,4 @@
+import { isSmsPoolCatalogServiceVisible } from "@/src/compliance/smspool-catalog";
 import { env } from "@/src/config/env";
 import { quoteRentalOffer } from "@/src/pricing/quote";
 import type { Offer } from "@/src/providers/types";
@@ -141,6 +142,11 @@ export async function getSmsPoolRentalDetails(rentalId: string): Promise<SmsPool
     .filter((item): item is SmsPoolRentalPlan => Boolean(item))
     .sort((a, b) => a.days - b.days);
 
+  const visibleServices = services
+    .map(serviceDto)
+    .filter((service) => isSmsPoolCatalogServiceVisible(service.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
   return {
     rental: {
       id: selected.id,
@@ -149,7 +155,7 @@ export async function getSmsPoolRentalDetails(rentalId: string): Promise<SmsPool
       periods: plans.map((plan) => plan.days),
     },
     plans,
-    services: services.map(serviceDto).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    services: visibleServices,
   };
 }
 
@@ -165,7 +171,7 @@ export async function quoteSmsPoolRental(input: {
   const service = input.serviceId
     ? details.services.find((item) => item.id === input.serviceId) ?? null
     : null;
-  if (input.serviceId && !service) throw new Error("SMSPOOL_RENTAL_SERVICE_NOT_FOUND");
+  if (input.serviceId && !service) throw new Error("SERVICE_BLOCKED_OR_NOT_AVAILABLE");
 
   const stock = await retrieveSmsPoolRentalStock(input.rentalId, input.days);
   return {
