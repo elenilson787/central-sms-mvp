@@ -1,3 +1,4 @@
+import { assertSmsPoolCatalogServiceVisible, isSmsPoolCatalogServiceVisible } from "@/src/compliance/smspool-catalog";
 import { env } from "@/src/config/env";
 import { quoteOffer } from "@/src/pricing/quote";
 import type { Offer } from "@/src/providers/types";
@@ -131,6 +132,7 @@ export async function listSmsPoolLiveCatalog(countrySelector = "BR") {
   const pricingRows = await retrieveSmsPoolPricing({ country: selectedCountry.ID });
   const offers = dedupeByServiceCheapest(pricingRows)
     .filter((row) => numeric(row.price) > 0)
+    .filter((row) => isSmsPoolCatalogServiceVisible(String(row.service_name ?? "")))
     .map(toOffer)
     .sort((a, b) => {
       if (a.salePriceCents !== null && b.salePriceCents !== null && a.salePriceCents !== b.salePriceCents) {
@@ -169,6 +171,7 @@ export async function quoteSmsPoolCatalogOffer(offerId: string): Promise<SmsPool
   const country = countries.find((item) => String(item.ID) === parsed.countryId);
   const service = services.find((item) => String(item.ID) === parsed.serviceId);
   if (!country || !service) throw new Error("SMSPOOL_OFFER_NOT_FOUND");
+  assertSmsPoolCatalogServiceVisible(String(service.name));
 
   const providerPrice = numeric(price.price);
   const stockAmount = Math.max(0, Math.trunc(numeric(stock.amount)));
