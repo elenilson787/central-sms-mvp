@@ -2,18 +2,26 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("Mini App live catalog is authenticated, read-only and white-labeled", async () => {
+test("Mini App live catalog is authenticated, gated and white-labeled", async () => {
   const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
   const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/quote/route.ts", import.meta.url), "utf8");
+  const purchaseRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/purchase/route.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
 
   assert.match(catalogRoute, /validateTelegramMiniAppInitData/);
-  assert.match(catalogRoute, /purchaseExecutionEnabled: false/);
+  assert.match(catalogRoute, /purchaseExecutionEnabled/);
+  assert.match(catalogRoute, /env\.purchasesEnabled/);
+  assert.match(catalogRoute, /getApprovedProducts\("smspool"\)/);
   assert.doesNotMatch(catalogRoute, /purchaseSmsPoolNumber/);
 
-  assert.match(quoteRoute, /quoteSmsPoolCatalogOffer/);
-  assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
+  assert.match(quoteRoute, /quoteBestSmsPoolPoolForOffer/);
+  assert.match(quoteRoute, /purchaseExecutionEnabled/);
+  assert.match(quoteRoute, /assertServiceAllowed/);
   assert.doesNotMatch(quoteRoute, /purchaseSmsPoolNumber/);
+
+  assert.match(purchaseRoute, /validateTelegramMiniAppInitData/);
+  assert.match(purchaseRoute, /purchaseActivation/);
+  assert.match(purchaseRoute, /BUY_ONE_REAL_SMS/);
 
   assert.match(panel, /Para qual app ou site você precisa de um número/);
   assert.match(panel, /Serviço que você quer ativar/);
@@ -30,7 +38,7 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
   assert.match(panel, /if \(query\.length < 2\) return \[\]/);
   assert.match(panel, /Comece digitando o nome do app ou site/);
   assert.match(panel, /Ex\.: YouTube, Discord, Steam/);
-  assert.match(panel, /Não encontramos esse serviço neste país/);
+  assert.match(panel, /Não encontramos um serviço aprovado com esse nome neste país/);
 });
 
 test("Mini App separates one-time activation from live long-term rental discovery", async () => {
