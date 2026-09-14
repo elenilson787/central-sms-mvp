@@ -1,4 +1,9 @@
 import { purchaseActivation } from "@/src/activations/service";
+import {
+  assertPublicBetaUserGuardrails,
+  assertPurchaseMarginGuardrails,
+  assertSmsPoolBalanceReserve,
+} from "@/src/commercial/purchase-guardrails";
 import { assertServiceAllowed } from "@/src/compliance/policy";
 import { env } from "@/src/config/env";
 import { quoteBestSmsPoolPoolForOffer } from "@/src/providers/smspool/best-pool";
@@ -89,6 +94,20 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: "INSUFFICIENT_BALANCE" }, { status: 409 });
     }
 
+    // Public beta is open to any authenticated Telegram user; safety comes from
+    // commercial limits instead of a manually curated user allow-list.
+    assertPurchaseMarginGuardrails({
+      salePriceCents: bestQuote.salePriceCents,
+      providerPrice: bestQuote.providerPrice,
+      providerCurrency: bestQuote.providerCurrency,
+    });
+    await assertSmsPoolBalanceReserve(bestQuote.providerPrice);
+    await assertPublicBetaUserGuardrails({
+      userId: session.user.id,
+      product: bestQuote.offer.product,
+      salePriceCents: bestQuote.salePriceCents,
+    });
+
     const activation = await purchaseActivation({
       userId: session.user.id,
       provider: "smspool",
@@ -117,6 +136,14 @@ export async function POST(request: Request) {
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
     if (message === "MINIAPP_USER_BLOCKED") return Response.json({ error: message }, { status: 403 });
 
+    const betaLimit = [
+      "BETA_PURCHASE_HOURLY_LIMIT",
+      "BETA_PURCHASE_DAILY_LIMIT",
+      "BETA_DAILY_SPEND_LIMIT",
+      "BETA_PENDING_ACTIVATIONS_LIMIT",
+      "BETA_PENDING_SERVICE_LIMIT",
+    ].some((code) => message.includes(code));
+
     const expected = [
       "PURCHASES_DISABLED",
       "SMSPOOL_COMMERCIAL_APPROVAL_REQUIRED",
@@ -129,9 +156,17 @@ export async function POST(request: Request) {
       "OFFER_NOT_AVAILABLE",
       "INSUFFICIENT_BALANCE",
       "PRICE_CHANGED_REVIEW_REQUIRED",
+      "SALE_PRICE_BELOW_MINIMUM",
+      "MINIMUM_MARGIN_NOT_MET",
+      "SMSPOOL_BALANCE_RESERVE_REQUIRED",
+      "BETA_PURCHASE_HOURLY_LIMIT",
+      "BETA_PURCHASE_DAILY_LIMIT",
+      "BETA_DAILY_SPEND_LIMIT",
+      "BETA_PENDING_ACTIVATIONS_LIMIT",
+      "BETA_PENDING_SERVICE_LIMIT",
     ].some((code) => message.includes(code));
 
     console.error("[miniapp-real-purchase] failed", { message });
-    return Response.json({ ok: false, error: message }, { status: expected ? 409 : 502 });
+    return Response.json({ ok: false, error: message }, { status: betaLimit ? 429 : expected ? 409 : 502 });
   }
 }
