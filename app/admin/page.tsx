@@ -157,17 +157,17 @@ export default function AdminPage() {
 
         if (onlyPolicyBlock) {
           const approve = window.confirm(
-            `APROVAR YOUTUBE PARA O TESTE\n\n` +
+            `APROVAR DISCORD PARA O TESTE\n\n` +
             `Serviço: ${preview.offer.label}\n` +
             `Service ID do SMSPool: ${preview.offer.product}\n` +
             `País do teste: ${preview.offer.countryName}\n\n` +
-            `Esta ação habilita SOMENTE este service ID do YouTube na allow-list da Central SMS, ` +
+            `Esta ação habilita SOMENTE este service ID do Discord na allow-list da Central SMS, ` +
             `na categoria standard. Nenhum número será comprado nesta etapa.\n\n` +
             `Deseja aprovar este serviço?`,
           );
 
           if (!approve) {
-            setMessage("Aprovação do YouTube cancelada. Nenhuma compra foi feita.");
+            setMessage("Aprovação do Discord cancelada. Nenhuma compra foi feita.");
             return;
           }
 
@@ -177,15 +177,15 @@ export default function AdminPage() {
             body: JSON.stringify({
               action: "approve_service",
               userId: user.id,
-              confirmation: "APPROVE_YOUTUBE_BR_STANDARD",
+              confirmation: "APPROVE_DISCORD_BR_STANDARD",
             }),
           });
           const approvalPayload = await approvalResponse.json() as TestPurchaseResponse;
           if (!approvalResponse.ok || !approvalPayload.ok) {
-            throw new Error(approvalPayload.error ?? "Falha ao aprovar YouTube para o teste");
+            throw new Error(approvalPayload.error ?? "Falha ao aprovar Discord para o teste");
           }
 
-          setMessage("YouTube aprovado na allow-list como serviço standard. Nenhuma compra foi feita. Clique novamente em ‘Testar 1 ativação real’ para revisar preço e confirmar a compra.");
+          setMessage("Discord aprovado na allow-list como serviço standard. Nenhuma compra foi feita. Clique novamente em ‘Testar 1 ativação real’ para revisar preço e confirmar a compra.");
           return;
         }
 
@@ -197,7 +197,7 @@ export default function AdminPage() {
       const providerPrice = providerMoney(preview.offer.providerPrice, preview.offer.providerCurrency);
       const projected = money(preview.projectedBalanceCents);
       const confirmation = window.confirm(
-        `COMPRA REAL DE TESTE\n\n` +
+        `COMPRA REAL DE TESTE — DISCORD\n\n` +
         `Usuário: ${user.first_name ?? user.username ?? user.telegram_user_id}\n` +
         `Serviço: ${preview.offer.label}\n` +
         `País: ${preview.offer.countryName}\n` +
@@ -212,7 +212,7 @@ export default function AdminPage() {
         return;
       }
 
-      const idempotencyKey = `admin-test:${user.id}:${crypto.randomUUID()}`;
+      const idempotencyKey = `admin-test:discord:${user.id}:${crypto.randomUUID()}`;
       const executeResponse = await fetch("/api/admin/activations/test-purchase", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
@@ -220,7 +220,7 @@ export default function AdminPage() {
           action: "execute",
           userId: user.id,
           idempotencyKey,
-          confirmation: "BUY_ONE_REAL_YOUTUBE_BR",
+          confirmation: "BUY_ONE_REAL_DISCORD_BR",
         }),
       });
       const executePayload = await executeResponse.json() as TestPurchaseResponse;
@@ -231,7 +231,7 @@ export default function AdminPage() {
       const activation = executePayload.activation;
       await searchUsers();
       setMessage(
-        `Compra real de teste criada com sucesso. ` +
+        `Compra real de teste do Discord criada com sucesso. ` +
         `Status: ${activation.status ?? "—"}. ` +
         `Número: ${activation.phone ?? "aguardando atribuição"}. ` +
         `Ativação: ${activation.id ?? "—"}.`,
@@ -269,11 +269,11 @@ export default function AdminPage() {
 
         <div className={styles.testPurchase}>
           <div>
-            <strong>🧪 Compra real controlada</strong>
-            <p>Consulta novamente preço, estoque, saldo e política. Só depois de uma confirmação explícita compra 1 número real de YouTube/Brasil para este usuário.</p>
+            <strong>🧪 Compra real controlada — Discord</strong>
+            <p>Consulta novamente preço, estoque, saldo e política. Só depois de uma confirmação explícita compra 1 número real de Discord/Brasil para este usuário.</p>
           </div>
           <button className={`${styles.button} ${styles.testButton}`} disabled={busy || !token} onClick={() => void runControlledTestPurchase(user)}>
-            {busy ? "Aguarde…" : "Testar 1 ativação real"}
+            {busy ? "Aguarde…" : "Testar Discord"}
           </button>
         </div>
 
