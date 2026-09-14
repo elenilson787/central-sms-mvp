@@ -31,6 +31,24 @@ function rentalTypeUnavailable(message: string) {
   return message.includes("SMSPOOL_API_ERROR:404:") && message.toLowerCase().includes("no available rentals found");
 }
 
+function safetySnapshot(livePurchasesAllowed: boolean) {
+  return {
+    purchasesEnabled: env.purchasesEnabled,
+    commercialApproved: env.smsPoolCommercialApproved,
+    livePurchasesAllowed,
+    betaMode: env.betaMode,
+    betaMaxPurchasesPerHour: env.betaMaxPurchasesPerHour,
+    betaMaxPurchasesPerDay: env.betaMaxPurchasesPerDay,
+    betaMaxDailySpendBrlCents: env.betaMaxDailySpendBrlCents,
+    betaMaxPendingActivations: env.betaMaxPendingActivations,
+    betaMaxPendingPerService: env.betaMaxPendingPerService,
+    smsPoolMinBalance: env.smsPoolMinBalance,
+    minimumSalePriceBrlCents: env.minimumSalePriceBrlCents,
+    minimumGrossMarginPercent: env.minimumGrossMarginPercent,
+    minimumGrossMarginBrlCents: env.minimumGrossMarginBrlCents,
+  };
+}
+
 async function rentalDiagnostics(type: 0 | 1) {
   try {
     const payload = await retrieveSmsPoolRentalIds(type);
@@ -89,6 +107,7 @@ export async function GET(request: Request) {
       purchasesEnabled: env.purchasesEnabled,
       commercialApproved: env.smsPoolCommercialApproved,
       priceCurrency: env.smsPoolPriceCurrency,
+      safety: safetySnapshot(false),
       error: "SMSPOOL_API_KEY_NOT_CONFIGURED",
     }, { status: 503 });
   }
@@ -142,11 +161,7 @@ export async function GET(request: Request) {
         type0: rentalType0,
         type1: rentalType1,
       },
-      safety: {
-        purchasesEnabled: env.purchasesEnabled,
-        commercialApproved: env.smsPoolCommercialApproved,
-        livePurchasesAllowed: Boolean(env.purchasesEnabled && env.smsPoolCommercialApproved && env.smsPoolApiKey),
-      },
+      safety: safetySnapshot(Boolean(env.purchasesEnabled && env.smsPoolCommercialApproved && env.smsPoolApiKey)),
     });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "SMSPOOL_DIAGNOSTICS_FAILED";
@@ -157,11 +172,7 @@ export async function GET(request: Request) {
       configured: true,
       connection: "failed",
       error: message.startsWith("SMSPOOL_API_ERROR") ? message : "SMSPOOL_DIAGNOSTICS_FAILED",
-      safety: {
-        purchasesEnabled: env.purchasesEnabled,
-        commercialApproved: env.smsPoolCommercialApproved,
-        livePurchasesAllowed: false,
-      },
+      safety: safetySnapshot(false),
     }, { status: 502 });
   }
 }
