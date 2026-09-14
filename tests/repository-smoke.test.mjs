@@ -87,18 +87,23 @@ test("PIX payer PII is not inserted into local payments table", async () => {
   assert.match(pixRoute, /createPixOrder/);
 });
 
-test("live catalog cannot execute provider purchases", async () => {
+test("live customer purchases are exposed only behind the commercial kill switch", async () => {
   const page = await readFile(new URL("../app/miniapp/page.tsx", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
   const catalogRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/route.ts", import.meta.url), "utf8");
   const quoteRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/quote/route.ts", import.meta.url), "utf8");
+  const purchaseRoute = await readFile(new URL("../app/api/telegram/miniapp/catalog/purchase/route.ts", import.meta.url), "utf8");
   const catalog = await readFile(new URL("../src/providers/smspool/catalog.ts", import.meta.url), "utf8");
 
   assert.match(page, /SmsPoolCatalogPanel/);
   assert.match(panel, /Confirmar compra — aguardando liberação/);
-  assert.match(panel, /Quando a compra estiver liberada/);
-  assert.match(catalogRoute, /purchaseExecutionEnabled: false/);
-  assert.match(quoteRoute, /purchaseExecutionEnabled: false/);
+  assert.match(panel, /A compra real permanece bloqueada pela trava comercial do sistema/);
+  assert.match(catalogRoute, /env\.purchasesEnabled/);
+  assert.match(catalogRoute, /env\.smsPoolCommercialApproved/);
+  assert.match(quoteRoute, /env\.purchasesEnabled/);
+  assert.match(quoteRoute, /env\.smsPoolCommercialApproved/);
+  assert.match(purchaseRoute, /purchaseActivation/);
+  assert.match(purchaseRoute, /BUY_ONE_REAL_SMS/);
   assert.doesNotMatch(catalogRoute, /purchaseSmsPoolNumber/);
   assert.doesNotMatch(quoteRoute, /purchaseSmsPoolNumber/);
   assert.doesNotMatch(catalog, /purchaseSmsPoolNumber/);

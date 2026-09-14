@@ -15,6 +15,7 @@ type PurchaseInput = {
   product: string;
   kind: NumberKind;
   idempotencyKey?: string;
+  maxSalePriceCents?: number;
 };
 
 type ActivationRow = Record<string, unknown> & {
@@ -104,6 +105,16 @@ export async function purchaseActivation(input: PurchaseInput): Promise<Record<s
   if (!quote.pricingConfigured || quote.salePriceCents === null) throw new Error("PRICING_NOT_CONFIGURED");
   if (quote.stock < 1) throw new Error("OFFER_NOT_AVAILABLE");
 
+  if (input.maxSalePriceCents !== undefined) {
+    const maxSalePriceCents = Math.trunc(Number(input.maxSalePriceCents));
+    if (!Number.isFinite(maxSalePriceCents) || maxSalePriceCents < 0) {
+      throw new Error("MAX_SALE_PRICE_INVALID");
+    }
+    if (quote.salePriceCents > maxSalePriceCents) {
+      throw new Error("PRICE_CHANGED_REVIEW_REQUIRED");
+    }
+  }
+
   // Catalog filtering protects discovery; this database policy is the second,
   // explicit allow-list required before a real sale can execute.
   await assertServiceAllowed("smspool", quote.offer.product);
@@ -155,6 +166,7 @@ export async function purchaseActivation(input: PurchaseInput): Promise<Record<s
         activationId: activation.id,
         provider: "smspool",
         offerId,
+        maxSalePriceCents: input.maxSalePriceCents ?? null,
       },
     });
     walletDebited = true;

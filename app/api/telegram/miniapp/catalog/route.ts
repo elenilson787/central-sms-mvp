@@ -1,3 +1,4 @@
+import { getApprovedProducts } from "@/src/compliance/policy";
 import { env } from "@/src/config/env";
 import { listSmsPoolLiveCatalog } from "@/src/providers/smspool/catalog";
 import { consumeRateLimit } from "@/src/security/rate-limit";
@@ -30,31 +31,46 @@ export async function POST(request: Request) {
     });
     if (!allowed) return Response.json({ error: "RATE_LIMITED" }, { status: 429 });
 
-    const catalog = await listSmsPoolLiveCatalog(body.country || "BR");
-    const offers = catalog.offers.map((offer) => ({
-      id: offer.id,
-      country: offer.country,
-      countryName: offer.countryName,
-      product: offer.product,
-      label: offer.label,
-      description: offer.description,
-      kind: offer.kind,
-      stock: offer.stock,
-      salePriceCents: offer.salePriceCents,
-      currency: offer.currency,
-      pricingConfigured: offer.pricingConfigured,
-    }));
+    const [catalog, approvedProducts] = await Promise.all([
+      listSmsPoolLiveCatalog(body.country || "BR"),
+      getApprovedProducts("smspool"),
+    ]);
+
+    const offers = catalog.offers
+      .filter((offer) => approvedProducts.has(String(offer.product).toLowerCase()))
+      .map((offer) => ({
+        id: offer.id,
+        country: offer.country,
+        countryName: offer.countryName,
+        product: offer.product,
+        label: offer.label,
+        description: offer.description,
+        kind: offer.kind,
+        stock: offer.stock,
+        salePriceCents: offer.salePriceCents,
+        currency: offer.currency,
+        pricingConfigured: offer.pricingConfigured,
+      }));
+
+    const purchaseExecutionEnabled = Boolean(
+      env.purchasesEnabled
+      && env.smsPoolCommercialApproved
+      && env.smsPoolApiKey,
+    );
 
     return Response.json({
       ok: true,
-      mode: "live-readonly",
-      purchaseExecutionEnabled: false,
-      disclaimer: "Catálogo real conectado. Compras externas permanecem bloqueadas nesta etapa.",
+      mode: purchaseExecutionEnabled ? "live-purchasable" : "live-readonly",
+      purchaseExecutionEnabled,
+      disclaimer: purchaseExecutionEnabled
+        ? "Catálogo real conectado. Compras são revalidadas no servidor antes do débito."
+        : "Catálogo real conectado. Compras permanecem bloqueadas pela trava comercial.",
       countries: catalog.countries,
       selectedCountry: catalog.selectedCountry,
       offers,
       pricingConfigured: catalog.pricingConfigured,
-      purchasesAvailable: false,
+      purchasesAvailable: purchaseExecutionEnabled,
+      approvedOnly: true,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";

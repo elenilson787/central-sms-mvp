@@ -1,5 +1,6 @@
+import { assertServiceAllowed } from "@/src/compliance/policy";
 import { env } from "@/src/config/env";
-import { quoteSmsPoolCatalogOffer } from "@/src/providers/smspool/catalog";
+import { quoteBestSmsPoolPoolForOffer } from "@/src/providers/smspool/best-pool";
 import { consumeRateLimit } from "@/src/security/rate-limit";
 import { validateTelegramMiniAppInitData } from "@/src/telegram/miniapp-auth";
 import { getOrCreateMiniAppSession } from "@/src/telegram/miniapp-session";
@@ -34,14 +35,27 @@ export async function POST(request: Request) {
 
     const [session, quote] = await Promise.all([
       getOrCreateMiniAppSession(validated.user),
-      quoteSmsPoolCatalogOffer(body.offerId),
+      quoteBestSmsPoolPoolForOffer(body.offerId),
     ]);
+
+    await assertServiceAllowed("smspool", quote.offer.product);
+
+    const purchaseExecutionEnabled = Boolean(
+      env.purchasesEnabled
+      && env.smsPoolCommercialApproved
+      && env.smsPoolApiKey,
+    );
+    const blockedReason = !env.purchasesEnabled
+      ? "PURCHASES_DISABLED"
+      : !env.smsPoolCommercialApproved
+        ? "SMSPOOL_COMMERCIAL_APPROVAL_REQUIRED"
+        : null;
 
     return Response.json({
       ok: true,
-      mode: "live-readonly",
-      purchaseExecutionEnabled: false,
-      blockedReason: "PURCHASE_NOT_AVAILABLE",
+      mode: purchaseExecutionEnabled ? "live-purchasable" : "live-readonly",
+      purchaseExecutionEnabled,
+      blockedReason,
       canAfford: quote.salePriceCents !== null
         ? session.wallet.balanceCents >= quote.salePriceCents
         : null,
@@ -50,6 +64,7 @@ export async function POST(request: Request) {
         id: quote.offer.id,
         country: quote.offer.country,
         countryName: quote.offer.countryName,
+        operator: quote.offer.operator,
         product: quote.offer.product,
         label: quote.offer.label,
         description: quote.offer.description,
@@ -58,6 +73,11 @@ export async function POST(request: Request) {
         salePriceCents: quote.salePriceCents,
         currency: "BRL",
         pricingConfigured: quote.pricingConfigured,
+      },
+      selection: {
+        strategy: "highest_success_rate_then_lowest_price",
+        pool: quote.offer.operator,
+        successRate: quote.successRate ?? null,
       },
       availability: {
         stock: quote.stock,
@@ -72,6 +92,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     if (message.startsWith("TELEGRAM_INIT_DATA_")) return Response.json({ error: message }, { status: 401 });
+    if (message === "SERVICE_NOT_APPROVED_FOR_SALE" || message.startsWith("SERVICE_BLOCKED_BY_COMPLIANCE_POLICY")) {
+      return Response.json({ error: message }, { status: 403 });
+    }
+    if (message === "SMSPOOL_SERVICE_NO_STOCK") return Response.json({ error: message }, { status: 409 });
     console.error("[miniapp-live-catalog-quote] failed", { message });
     return Response.json({ error: "CATALOG_QUOTE_FAILED" }, { status: 502 });
   }

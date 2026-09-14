@@ -52,7 +52,7 @@ function formatDate(value?: string) {
 }
 
 function kindLabel(kind: NumberKind) {
-  return kind === "TEMPORARY_HOSTING" ? "Número temporário" : "Ativação curta";
+  return kind === "TEMPORARY_HOSTING" ? "Número temporário" : "Ativação única";
 }
 
 function statusLabel(status: string) {
@@ -246,7 +246,12 @@ export default function TelegramMiniAppPage() {
           <PixPaymentHistory refreshKey={session.wallet.balanceCents} />
         </>}
 
-        {session && view === "catalog" && <SmsPoolCatalogPanel />}
+        {session && view === "catalog" && <SmsPoolCatalogPanel
+          onPurchaseCompleted={async () => {
+            await refreshSessionSilently();
+            setView("activations");
+          }}
+        />}
 
         {session && view === "activations" && <section className={styles.section}>
           <div className={styles.sectionHeader}>
