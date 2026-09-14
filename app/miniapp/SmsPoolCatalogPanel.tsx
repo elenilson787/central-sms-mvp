@@ -26,25 +26,45 @@ type CatalogOffer = {
 
 type CatalogPayload = {
   ok: true;
-  mode: "live-readonly";
-  purchaseExecutionEnabled: false;
+  mode: "live-readonly" | "live-purchasable";
+  purchaseExecutionEnabled: boolean;
   countries: CatalogCountry[];
   selectedCountry: CatalogCountry;
   offers: CatalogOffer[];
   pricingConfigured: boolean;
-  purchasesAvailable: false;
+  purchasesAvailable: boolean;
+  approvedOnly: boolean;
 };
 
 type QuotePayload = {
   ok: true;
-  mode: "live-readonly";
-  purchaseExecutionEnabled: false;
-  blockedReason: "PURCHASE_NOT_AVAILABLE";
+  mode: "live-readonly" | "live-purchasable";
+  purchaseExecutionEnabled: boolean;
+  blockedReason: string | null;
   canAfford: boolean | null;
   walletBalanceCents: number;
-  offer: CatalogOffer & { stock: number };
+  offer: CatalogOffer & { stock: number; operator: string };
+  selection: {
+    strategy: "highest_success_rate_then_lowest_price";
+    pool: string;
+    successRate: number | null;
+  };
   availability: { stock: number; successRate: number | null };
   price: { configured: boolean; salePriceCents: number | null; currency: "BRL" };
+};
+
+type PurchasePayload = {
+  ok?: boolean;
+  error?: string;
+  activation?: {
+    id?: string;
+    phone?: string | null;
+    status?: string;
+  };
+};
+
+type Props = {
+  onPurchaseCompleted?: () => void | Promise<void>;
 };
 
 const QUICK_SEARCHES = ["YouTube", "Discord", "Steam"];
@@ -59,7 +79,7 @@ function popup(title: string, message: string) {
   webApp?.showPopup({ title, message, buttons: [{ type: "ok" }] });
 }
 
-export default function SmsPoolCatalogPanel() {
+export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
   const [mode, setMode] = useState<"one-time" | "rental">("one-time");
   const [countries, setCountries] = useState<CatalogCountry[]>([]);
   const [country, setCountry] = useState("BR");
@@ -72,7 +92,9 @@ export default function SmsPoolCatalogPanel() {
   const [quote, setQuote] = useState<QuotePayload | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [reviewingPurchase, setReviewingPurchase] = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
+  const purchaseKeyRef = useRef<string | null>(null);
 
   const loadCatalog = useCallback(async (countrySelector: string) => {
     const webApp = window.Telegram?.WebApp;
@@ -115,6 +137,8 @@ export default function SmsPoolCatalogPanel() {
     setSelectedOffer(null);
     setQuote(null);
     setReviewingPurchase(false);
+    setPurchaseLoading(false);
+    purchaseKeyRef.current = null;
   }
 
   function selectMode(next: "one-time" | "rental") {
@@ -137,6 +161,8 @@ export default function SmsPoolCatalogPanel() {
     setQuote(null);
     setReviewingPurchase(false);
     setQuoteLoading(true);
+    setPurchaseLoading(false);
+    purchaseKeyRef.current = null;
     try {
       const response = await fetch("/api/telegram/miniapp/catalog/quote", {
         method: "POST",
@@ -148,11 +174,67 @@ export default function SmsPoolCatalogPanel() {
         throw new Error((payload as { error?: string }).error ?? "CATALOG_QUOTE_FAILED");
       }
       setQuote(payload as QuotePayload);
+      purchaseKeyRef.current = crypto.randomUUID();
     } catch (cause) {
       closeQuote();
       popup("Não foi possível consultar", cause instanceof Error ? cause.message : "Falha ao consultar disponibilidade.");
     } finally {
       setQuoteLoading(false);
+    }
+  }
+
+  async function executePurchase() {
+    const webApp = window.Telegram?.WebApp;
+    if (!webApp?.initData || !quote || !selectedOffer || quote.price.salePriceCents === null) return;
+    if (!quote.purchaseExecutionEnabled) {
+      popup("Compra ainda bloqueada", "A operação comercial ainda não foi liberada pelo administrador.");
+      return;
+    }
+
+    const idempotencyKey = purchaseKeyRef.current ?? crypto.randomUUID();
+    purchaseKeyRef.current = idempotencyKey;
+    setPurchaseLoading(true);
+
+    try {
+      const response = await fetch("/api/telegram/miniapp/catalog/purchase", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          initData: webApp.initData,
+          reviewedOfferId: quote.offer.id,
+          reviewedSalePriceCents: quote.price.salePriceCents,
+          idempotencyKey,
+          confirmation: "BUY_ONE_REAL_SMS",
+        }),
+      });
+      const payload = await response.json() as PurchasePayload;
+
+      if (!response.ok || !payload.ok || !payload.activation) {
+        const reason = payload.error ?? "PURCHASE_FAILED";
+        if (reason === "OFFER_CHANGED_REVIEW_REQUIRED" || reason === "PRICE_CHANGED_REVIEW_REQUIRED") {
+          setReviewingPurchase(false);
+          popup("Oferta atualizada", "Preço, pool ou disponibilidade mudou. Revise a cotação novamente antes de comprar.");
+          await openQuote(selectedOffer);
+          return;
+        }
+        throw new Error(reason);
+      }
+
+      webApp.HapticFeedback?.notificationOccurred("success");
+      const phone = payload.activation.phone?.trim();
+      popup(
+        "Compra confirmada",
+        phone
+          ? `Seu número ${phone} foi reservado. Acompanhe o SMS em Minhas ativações.`
+          : "Seu pedido foi criado. Acompanhe a atribuição do número em Minhas ativações.",
+      );
+      closeQuote();
+      await onPurchaseCompleted?.();
+    } catch (cause) {
+      webApp.HapticFeedback?.notificationOccurred("error");
+      popup("Não foi possível concluir", cause instanceof Error ? cause.message : "Falha ao concluir a compra.");
+    } finally {
+      setPurchaseLoading(false);
     }
   }
 
@@ -208,7 +290,7 @@ export default function SmsPoolCatalogPanel() {
           <div className={styles.guideIcon}>🔎</div>
           <div>
             <strong>Para qual app ou site você precisa de um número?</strong>
-            <p>Digite o nome do serviço que vai enviar o código por SMS. Ex.: procure por <b>YouTube</b> para encontrar um número para verificação do YouTube.</p>
+            <p>Digite o nome do serviço que vai enviar o código por SMS. O catálogo mostra somente serviços aprovados para venda.</p>
           </div>
         </div>
 
@@ -243,7 +325,7 @@ export default function SmsPoolCatalogPanel() {
 
         {!loading && !error && searchQuery.length < 2 && <div className={styles.searchPrompt}>
           <strong>Comece digitando o nome do app ou site</strong>
-          <span>Por exemplo: “YouTube”. Você verá apenas as opções correspondentes, em vez de navegar por centenas de serviços.</span>
+          <span>Você verá apenas serviços aprovados para venda neste país.</span>
         </div>}
 
         {!loading && !error && searchQuery.length >= 2 && <>
@@ -252,7 +334,7 @@ export default function SmsPoolCatalogPanel() {
             <span>para “{searchQuery}”</span>
           </div>
           <div className={styles.offerList}>
-            {!filteredOffers.length && <div className={styles.empty}>Não encontramos esse serviço neste país. Confira a escrita ou tente outro país.</div>}
+            {!filteredOffers.length && <div className={styles.empty}>Não encontramos um serviço aprovado com esse nome neste país.</div>}
             {filteredOffers.map((offer) => <article className={styles.offerCard} key={offer.id}>
               <div className={styles.offerTop}>
                 <div>
@@ -261,15 +343,15 @@ export default function SmsPoolCatalogPanel() {
                   <p>{offer.countryName} · SMS de verificação</p>
                 </div>
                 <div className={styles.offerPrice}>
-                  {offer.salePriceCents !== null ? formatMoney(offer.salePriceCents) : "Preço em configuração"}
+                  {offer.salePriceCents !== null ? `A partir de ${formatMoney(offer.salePriceCents)}` : "Preço em configuração"}
                 </div>
               </div>
-              <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. O número é disponibilizado após a compra e não deve ser tratado como um número permanente.</p>
+              <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. A cotação final prioriza o pool disponível com maior taxa de sucesso.</p>
               <div className={styles.offerMeta}>
                 <span>País: {offer.countryName}</span>
-                <span>Disponibilidade: consultar</span>
+                <span>Pool: selecionado por qualidade</span>
               </div>
-              <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver disponibilidade para {offer.label}</button>
+              <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver melhor disponibilidade para {offer.label}</button>
             </article>)}
           </div>
         </>}
@@ -286,13 +368,14 @@ export default function SmsPoolCatalogPanel() {
               <button className={styles.close} type="button" onClick={closeQuote}>×</button>
             </div>
 
-            {quoteLoading && <div className={styles.loading}>Consultando preço final e disponibilidade…</div>}
+            {quoteLoading && <div className={styles.loading}>Comparando pools, preço e disponibilidade…</div>}
 
             {quote && !reviewingPurchase && <>
               <div className={styles.quoteRows}>
                 <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "Preço em configuração"}</strong></div>
                 <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
-                <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
+                <div><span>Taxa de sucesso do pool</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
+                <div><span>Pool selecionado</span><strong>{quote.selection.pool}</strong></div>
                 <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
               </div>
 
@@ -309,7 +392,7 @@ export default function SmsPoolCatalogPanel() {
               </div>
 
               <p className={styles.modalText}>
-                Quando a compra estiver liberada, você receberá um número para usar no {selectedOffer.label} e acompanhará o código SMS dentro da Central SMS.
+                A Central SMS comparou os pools disponíveis e priorizou a maior taxa de sucesso, usando o menor preço como desempate.
               </p>
 
               <button
@@ -337,7 +420,7 @@ export default function SmsPoolCatalogPanel() {
                 <div className={styles.guideIcon}>🧾</div>
                 <div>
                   <strong>Confira antes de confirmar</strong>
-                  <p>Nenhuma compra será feita nesta tela enquanto a operação comercial estiver bloqueada.</p>
+                  <p>Ao confirmar, o servidor revalida pool, preço, estoque, saldo e allow-list antes de qualquer débito.</p>
                 </div>
               </div>
 
@@ -345,6 +428,8 @@ export default function SmsPoolCatalogPanel() {
                 <div><span>Produto</span><strong>Número para {selectedOffer.label}</strong></div>
                 <div><span>País do número</span><strong>{selectedOffer.countryName}</strong></div>
                 <div><span>Tipo</span><strong>Ativação única</strong></div>
+                <div><span>Pool selecionado</span><strong>{quote.selection.pool}</strong></div>
+                <div><span>Taxa de sucesso</span><strong>{quote.selection.successRate !== null ? `${quote.selection.successRate}%` : "—"}</strong></div>
                 <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "—"}</strong></div>
                 <div><span>Saldo atual</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
                 <div><span>Saldo após a compra</span><strong>{balanceAfterPurchase !== null ? formatMoney(balanceAfterPurchase) : "—"}</strong></div>
@@ -355,14 +440,26 @@ export default function SmsPoolCatalogPanel() {
               </div>
 
               <div className={styles.okNotice}>
-                Quando a venda for liberada, o preço e o estoque serão conferidos novamente no servidor antes do débito. Se o valor do fornecedor mudar, a compra não será executada silenciosamente por um preço maior.
+                O preço, o pool e o estoque serão conferidos novamente no servidor. Se o melhor pool mudar ou o preço subir, a compra será interrompida para uma nova revisão. Em caso de expiração/reembolso confirmado pelo fornecedor, o valor da ativação volta automaticamente para sua carteira.
               </div>
 
-              <button className={styles.primaryButton} type="button" disabled>
-                Confirmar compra — aguardando liberação
+              <button
+                className={styles.primaryButton}
+                type="button"
+                disabled={!quote.purchaseExecutionEnabled || purchaseLoading}
+                onClick={() => void executePurchase()}
+              >
+                {purchaseLoading
+                  ? "Confirmando compra…"
+                  : quote.purchaseExecutionEnabled
+                    ? `Confirmar compra por ${quotedPrice !== null ? formatMoney(quotedPrice) : "—"}`
+                    : "Confirmar compra — aguardando liberação"}
               </button>
-              <button className={styles.secondaryButton} type="button" onClick={() => setReviewingPurchase(false)}>Voltar</button>
-              <button className={styles.secondaryButton} type="button" onClick={closeQuote}>Fechar</button>
+              {!quote.purchaseExecutionEnabled && <div className={styles.warnNotice}>
+                A compra real permanece bloqueada pela trava comercial do sistema. Você pode revisar o pedido, mas nenhum débito será feito enquanto ela estiver desligada.
+              </div>}
+              <button className={styles.secondaryButton} type="button" disabled={purchaseLoading} onClick={() => setReviewingPurchase(false)}>Voltar</button>
+              <button className={styles.secondaryButton} type="button" disabled={purchaseLoading} onClick={closeQuote}>Fechar</button>
             </>}
           </section>
         </div>}
