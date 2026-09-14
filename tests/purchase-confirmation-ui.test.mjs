@@ -16,6 +16,17 @@ test("one-time purchase UI keeps two-step review and only executes when commerci
   assert.match(panel, /reviewedSalePriceCents: quote\.price\.salePriceCents/);
   assert.match(panel, /purchaseKeyRef/);
   assert.match(panel, /crypto\.randomUUID\(\)/);
-  assert.match(panel, /preço, o pool e o estoque serão conferidos novamente no servidor/i);
+  assert.match(panel, /preço, a rota e o estoque serão conferidos novamente no servidor/i);
   assert.doesNotMatch(panel, /\/api\/admin\/activations\/purchase/);
+});
+
+test("customer review hides raw provider stock counts and pool ids", async () => {
+  const panel = await readFile(new URL("../app/miniapp/SmsPoolCatalogPanel.tsx", import.meta.url), "utf8");
+
+  assert.match(panel, /Disponibilidade/);
+  assert.match(panel, /Disponível agora/);
+  assert.match(panel, /Rota selecionada/);
+  assert.match(panel, /Otimizada/);
+  assert.doesNotMatch(panel, /<strong>\{quote\.availability\.stock\}<\/strong>/);
+  assert.doesNotMatch(panel, /<strong>\{quote\.selection\.pool\}<\/strong>/);
 });
