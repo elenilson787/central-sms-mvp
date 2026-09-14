@@ -1,5 +1,6 @@
 import { purchaseActivation } from "@/src/activations/service";
 import {
+  assertPublicBetaGlobalGuardrails,
   assertPublicBetaUserGuardrails,
   assertPurchaseMarginGuardrails,
   assertSmsPoolBalanceReserve,
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
     }
 
     // Public beta is open to any authenticated Telegram user; safety comes from
-    // commercial limits instead of a manually curated user allow-list.
+    // profitability, provider reserve, per-user limits and system-wide budgets.
     assertPurchaseMarginGuardrails({
       salePriceCents: bestQuote.salePriceCents,
       providerPrice: bestQuote.providerPrice,
@@ -106,6 +107,11 @@ export async function POST(request: Request) {
       userId: session.user.id,
       product: bestQuote.offer.product,
       salePriceCents: bestQuote.salePriceCents,
+    });
+    await assertPublicBetaGlobalGuardrails({
+      salePriceCents: bestQuote.salePriceCents,
+      providerPrice: bestQuote.providerPrice,
+      providerCurrency: bestQuote.providerCurrency,
     });
 
     const activation = await purchaseActivation({
@@ -142,7 +148,12 @@ export async function POST(request: Request) {
       "BETA_DAILY_SPEND_LIMIT",
       "BETA_PENDING_ACTIVATIONS_LIMIT",
       "BETA_PENDING_SERVICE_LIMIT",
+      "BETA_GLOBAL_PURCHASE_HOURLY_LIMIT",
+      "BETA_GLOBAL_PURCHASE_DAILY_LIMIT",
+      "BETA_GLOBAL_SALES_LIMIT",
+      "BETA_GLOBAL_PROVIDER_SPEND_LIMIT",
     ].some((code) => message.includes(code));
+    const circuitBreakerOpen = message.includes("BETA_CIRCUIT_BREAKER_OPEN");
 
     const expected = [
       "PURCHASES_DISABLED",
@@ -164,9 +175,18 @@ export async function POST(request: Request) {
       "BETA_DAILY_SPEND_LIMIT",
       "BETA_PENDING_ACTIVATIONS_LIMIT",
       "BETA_PENDING_SERVICE_LIMIT",
+      "BETA_GLOBAL_PURCHASE_HOURLY_LIMIT",
+      "BETA_GLOBAL_PURCHASE_DAILY_LIMIT",
+      "BETA_GLOBAL_SALES_LIMIT",
+      "BETA_GLOBAL_PROVIDER_SPEND_LIMIT",
+      "BETA_GLOBAL_PROVIDER_SPEND_CURRENCY_UNSUPPORTED",
+      "BETA_CIRCUIT_BREAKER_OPEN",
     ].some((code) => message.includes(code));
 
     console.error("[miniapp-real-purchase] failed", { message });
-    return Response.json({ ok: false, error: message }, { status: betaLimit ? 429 : expected ? 409 : 502 });
+    return Response.json(
+      { ok: false, error: message },
+      { status: circuitBreakerOpen ? 503 : betaLimit ? 429 : expected ? 409 : 502 },
+    );
   }
 }

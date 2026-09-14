@@ -1,3 +1,4 @@
+import { getPublicBetaGlobalGuardrailSnapshot } from "@/src/commercial/purchase-guardrails";
 import { env } from "@/src/config/env";
 import {
   retrieveSmsPoolBalance,
@@ -42,11 +43,32 @@ function safetySnapshot(livePurchasesAllowed: boolean) {
     betaMaxDailySpendBrlCents: env.betaMaxDailySpendBrlCents,
     betaMaxPendingActivations: env.betaMaxPendingActivations,
     betaMaxPendingPerService: env.betaMaxPendingPerService,
+    betaGlobalMaxPurchasesPerHour: env.betaGlobalMaxPurchasesPerHour,
+    betaGlobalMaxPurchasesPerDay: env.betaGlobalMaxPurchasesPerDay,
+    betaGlobalMaxSalesBrlCentsPerDay: env.betaGlobalMaxSalesBrlCentsPerDay,
+    betaGlobalMaxProviderSpendUsdPerDay: env.betaGlobalMaxProviderSpendUsdPerDay,
+    betaCircuitBreakerFailures: env.betaCircuitBreakerFailures,
+    betaCircuitBreakerWindowMinutes: env.betaCircuitBreakerWindowMinutes,
     smsPoolMinBalance: env.smsPoolMinBalance,
     minimumSalePriceBrlCents: env.minimumSalePriceBrlCents,
     minimumGrossMarginPercent: env.minimumGrossMarginPercent,
     minimumGrossMarginBrlCents: env.minimumGrossMarginBrlCents,
   };
+}
+
+async function globalGuardrailDiagnostics() {
+  try {
+    return {
+      ok: true as const,
+      ...(await getPublicBetaGlobalGuardrailSnapshot()),
+      error: null,
+    };
+  } catch (cause) {
+    return {
+      ok: false as const,
+      error: cause instanceof Error ? cause.message : "GLOBAL_GUARDRAIL_DIAGNOSTICS_FAILED",
+    };
+  }
 }
 
 async function rentalDiagnostics(type: 0 | 1) {
@@ -113,12 +135,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [balanceResult, countries, services, rentalType0, rentalType1] = await Promise.all([
+    const [balanceResult, countries, services, rentalType0, rentalType1, globalGuardrails] = await Promise.all([
       retrieveSmsPoolBalance(),
       retrieveSmsPoolCountries(),
       retrieveSmsPoolServices(),
       rentalDiagnostics(0),
       rentalDiagnostics(1),
+      globalGuardrailDiagnostics(),
     ]);
 
     const preferredCountry = countries.find((item) => String(item.short_name).toUpperCase() === "BR") ?? countries[0];
@@ -136,6 +159,20 @@ export async function GET(request: Request) {
       providerPrice: safeNumber(item.price),
       providerCurrency: env.smsPoolPriceCurrency,
     }));
+
+    const globalCapacityAvailable = !globalGuardrails.ok || (
+      !globalGuardrails.circuitBreakerOpen
+      && globalGuardrails.purchasesLastHour < globalGuardrails.maxPurchasesPerHour
+      && globalGuardrails.purchasesLast24h < globalGuardrails.maxPurchasesPerDay
+      && globalGuardrails.salesLast24hCents < globalGuardrails.maxSalesLast24hCents
+      && globalGuardrails.providerSpendLast24hUsd < globalGuardrails.maxProviderSpendLast24hUsd
+    );
+    const livePurchasesAllowed = Boolean(
+      env.purchasesEnabled
+      && env.smsPoolCommercialApproved
+      && env.smsPoolApiKey
+      && globalCapacityAvailable,
+    );
 
     return Response.json({
       ok: true,
@@ -161,7 +198,8 @@ export async function GET(request: Request) {
         type0: rentalType0,
         type1: rentalType1,
       },
-      safety: safetySnapshot(Boolean(env.purchasesEnabled && env.smsPoolCommercialApproved && env.smsPoolApiKey)),
+      globalGuardrails,
+      safety: safetySnapshot(livePurchasesAllowed),
     });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "SMSPOOL_DIAGNOSTICS_FAILED";
