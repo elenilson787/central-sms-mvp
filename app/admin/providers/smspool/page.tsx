@@ -50,6 +50,16 @@ type Diagnostic = {
     purchasesEnabled: boolean;
     commercialApproved: boolean;
     livePurchasesAllowed: boolean;
+    betaMode: boolean;
+    betaMaxPurchasesPerHour: number;
+    betaMaxPurchasesPerDay: number;
+    betaMaxDailySpendBrlCents: number;
+    betaMaxPendingActivations: number;
+    betaMaxPendingPerService: number;
+    smsPoolMinBalance: number;
+    minimumSalePriceBrlCents: number;
+    minimumGrossMarginPercent: number;
+    minimumGrossMarginBrlCents: number;
   };
   error?: string;
 };
@@ -57,6 +67,10 @@ type Diagnostic = {
 function money(value: number | null | undefined, currency = "USD") {
   if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
+}
+
+function cents(value: number | null | undefined) {
+  return money(value === null || value === undefined ? null : value / 100, "BRL");
 }
 
 function RentalTable({ title, group }: { title: string; group?: RentalDiagnosticGroup }) {
@@ -146,8 +160,23 @@ export default function SmsPoolAdminPage() {
           <div><strong>PURCHASES_ENABLED</strong><br /><span className={styles.badge}>{String(data.safety?.purchasesEnabled)}</span></div>
           <div><strong>SMSPOOL_COMMERCIAL_APPROVED</strong><br /><span className={styles.badge}>{String(data.safety?.commercialApproved)}</span></div>
           <div><strong>Compra real liberada</strong><br /><span className={styles.badge}>{String(data.safety?.livePurchasesAllowed)}</span></div>
+          <div><strong>Modo beta público</strong><br /><span className={styles.badge}>{String(data.safety?.betaMode)}</span></div>
         </div>
-        <p className={styles.muted}>Enquanto a aprovação comercial não chegar por escrito, o resultado correto é compra real = false.</p>
+        <p className={styles.muted}>O beta público não exige cadastro prévio de usuários. As compras ficam protegidas por limites por usuário, margem mínima e reserva de saldo do provider.</p>
+      </section>
+
+      <section className={styles.card}>
+        <h2>Limites do beta público</h2>
+        <div className={styles.grid}>
+          <div><strong>Compras por hora</strong><br />{data.safety?.betaMaxPurchasesPerHour ?? "—"}</div>
+          <div><strong>Compras por 24h</strong><br />{data.safety?.betaMaxPurchasesPerDay ?? "—"}</div>
+          <div><strong>Gasto por 24h</strong><br />{cents(data.safety?.betaMaxDailySpendBrlCents)}</div>
+          <div><strong>Pendentes totais</strong><br />{data.safety?.betaMaxPendingActivations ?? "—"}</div>
+          <div><strong>Pendentes por serviço</strong><br />{data.safety?.betaMaxPendingPerService ?? "—"}</div>
+          <div><strong>Reserva SMSPool</strong><br />{money(data.safety?.smsPoolMinBalance, data.balance?.currency ?? "USD")}</div>
+          <div><strong>Preço mínimo</strong><br />{cents(data.safety?.minimumSalePriceBrlCents)}</div>
+          <div><strong>Margem mínima</strong><br />{data.safety?.minimumGrossMarginPercent ?? "—"}% + {cents(data.safety?.minimumGrossMarginBrlCents)}</div>
+        </div>
       </section>
 
       <section className={styles.card}>
