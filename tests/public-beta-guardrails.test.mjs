@@ -43,10 +43,10 @@ test("provider reserve and minimum margin are checked before customer purchase",
   assert.match(route, /assertPublicBetaUserGuardrails/);
   assert.match(route, /purchaseActivation\(/);
 
-  const marginCheck = route.indexOf("assertPurchaseMarginGuardrails");
-  const providerReserve = route.indexOf("assertSmsPoolBalanceReserve");
-  const betaLimits = route.indexOf("assertPublicBetaUserGuardrails");
-  const purchase = route.lastIndexOf("purchaseActivation(");
+  const marginCheck = route.indexOf("assertPurchaseMarginGuardrails({");
+  const providerReserve = route.indexOf("await assertSmsPoolBalanceReserve(");
+  const betaLimits = route.indexOf("await assertPublicBetaUserGuardrails({");
+  const purchase = route.lastIndexOf("purchaseActivation({");
   assert.ok(marginCheck >= 0 && providerReserve > marginCheck && betaLimits > providerReserve && purchase > betaLimits);
 });
 
