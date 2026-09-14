@@ -36,6 +36,7 @@ type TestPurchasePreview = {
     providerPrice: number;
     providerCurrency: string;
   };
+  selection?: { strategy: string };
   price: { salePriceCents: number | null; currency: string };
   stock: number;
   successRate: number | null;
@@ -68,6 +69,13 @@ function money(cents?: number | null) {
 
 function providerMoney(value: number, currency: string) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(value);
+}
+
+function successRate(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "não informada";
+  const numeric = Number(value);
+  const percent = numeric <= 1 ? numeric * 100 : numeric;
+  return `${percent.toFixed(1).replace(".0", "")}%`;
 }
 
 function date(value?: string | null) {
@@ -185,7 +193,7 @@ export default function AdminPage() {
             throw new Error(approvalPayload.error ?? "Falha ao aprovar Discord para o teste");
           }
 
-          setMessage("Discord aprovado na allow-list como serviço standard. Nenhuma compra foi feita. Clique novamente em ‘Testar 1 ativação real’ para revisar preço e confirmar a compra.");
+          setMessage("Discord aprovado na allow-list como serviço standard. Nenhuma compra foi feita. Clique novamente em ‘Testar Discord’ para revisar o melhor pool disponível e confirmar a compra.");
           return;
         }
 
@@ -196,16 +204,20 @@ export default function AdminPage() {
       const salePrice = money(preview.price.salePriceCents);
       const providerPrice = providerMoney(preview.offer.providerPrice, preview.offer.providerCurrency);
       const projected = money(preview.projectedBalanceCents);
+      const rate = successRate(preview.successRate);
       const confirmation = window.confirm(
         `COMPRA REAL DE TESTE — DISCORD\n\n` +
         `Usuário: ${user.first_name ?? user.username ?? user.telegram_user_id}\n` +
         `Serviço: ${preview.offer.label}\n` +
         `País: ${preview.offer.countryName}\n` +
+        `Pool selecionado: ${preview.offer.operator}\n` +
+        `Taxa de sucesso do pool: ${rate}\n` +
+        `Critério: maior taxa de sucesso; menor preço como desempate\n` +
         `Preço para a carteira: ${salePrice}\n` +
         `Custo atual no SMSPool: ${providerPrice}\n` +
         `Estoque: ${preview.stock}\n` +
         `Saldo após a compra: ${projected}\n\n` +
-        `Será comprado EXATAMENTE 1 número real. Deseja continuar?`,
+        `Será comprado EXATAMENTE 1 número real deste pool. Deseja continuar?`,
       );
       if (!confirmation) {
         setMessage("Compra de teste cancelada antes de qualquer débito.");
@@ -220,11 +232,15 @@ export default function AdminPage() {
           action: "execute",
           userId: user.id,
           idempotencyKey,
+          expectedOfferId: preview.offer.id,
           confirmation: "BUY_ONE_REAL_DISCORD_BR",
         }),
       });
       const executePayload = await executeResponse.json() as TestPurchaseResponse;
       if (!executeResponse.ok || !executePayload.ok || !executePayload.activation) {
+        if (executePayload.error === "OFFER_CHANGED_REVIEW_REQUIRED") {
+          throw new Error("O melhor pool mudou desde a confirmação. Clique em ‘Testar Discord’ novamente para revisar os valores atualizados antes de comprar.");
+        }
         throw new Error(executePayload.error ?? "Falha na compra real de teste");
       }
 
@@ -270,7 +286,7 @@ export default function AdminPage() {
         <div className={styles.testPurchase}>
           <div>
             <strong>🧪 Compra real controlada — Discord</strong>
-            <p>Consulta novamente preço, estoque, saldo e política. Só depois de uma confirmação explícita compra 1 número real de Discord/Brasil para este usuário.</p>
+            <p>Compara os pools disponíveis do Discord/Brasil, prioriza a maior taxa de sucesso e usa o menor preço como desempate. Só compra após confirmação explícita.</p>
           </div>
           <button className={`${styles.button} ${styles.testButton}`} disabled={busy || !token} onClick={() => void runControlledTestPurchase(user)}>
             {busy ? "Aguarde…" : "Testar Discord"}
