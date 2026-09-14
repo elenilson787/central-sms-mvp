@@ -213,7 +213,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
         const reason = payload.error ?? "PURCHASE_FAILED";
         if (reason === "OFFER_CHANGED_REVIEW_REQUIRED" || reason === "PRICE_CHANGED_REVIEW_REQUIRED") {
           setReviewingPurchase(false);
-          popup("Oferta atualizada", "Preço, pool ou disponibilidade mudou. Revise a cotação novamente antes de comprar.");
+          popup("Oferta atualizada", "Preço, rota ou disponibilidade mudou. Revise a cotação novamente antes de comprar.");
           await openQuote(selectedOffer);
           return;
         }
@@ -346,10 +346,10 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                   {offer.salePriceCents !== null ? `A partir de ${formatMoney(offer.salePriceCents)}` : "Preço em configuração"}
                 </div>
               </div>
-              <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. A cotação final prioriza o pool disponível com maior taxa de sucesso.</p>
+              <p className={styles.offerDescription}>Use esta opção para receber o código SMS enviado pelo {offer.label}. A cotação final prioriza a rota disponível com maior taxa de sucesso.</p>
               <div className={styles.offerMeta}>
                 <span>País: {offer.countryName}</span>
-                <span>Pool: selecionado por qualidade</span>
+                <span>Rota: selecionada por qualidade</span>
               </div>
               <button className={styles.primaryButton} type="button" onClick={() => void openQuote(offer)}>Ver melhor disponibilidade para {offer.label}</button>
             </article>)}
@@ -368,19 +368,19 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
               <button className={styles.close} type="button" onClick={closeQuote}>×</button>
             </div>
 
-            {quoteLoading && <div className={styles.loading}>Comparando pools, preço e disponibilidade…</div>}
+            {quoteLoading && <div className={styles.loading}>Comparando rotas, preço e disponibilidade…</div>}
 
             {quote && !reviewingPurchase && <>
               <div className={styles.quoteRows}>
                 <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "Preço em configuração"}</strong></div>
-                <div><span>Números disponíveis agora</span><strong>{quote.availability.stock}</strong></div>
-                <div><span>Taxa de sucesso do pool</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
-                <div><span>Pool selecionado</span><strong>{quote.selection.pool}</strong></div>
+                <div><span>Disponibilidade</span><strong>{quote.availability.stock > 0 ? "Disponível agora" : "Sem estoque"}</strong></div>
+                <div><span>Taxa de sucesso</span><strong>{quote.availability.successRate !== null ? `${quote.availability.successRate}%` : "—"}</strong></div>
+                <div><span>Rota selecionada</span><strong>Otimizada</strong></div>
                 <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
               </div>
 
               <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
-                {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
+                {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora. A disponibilidade será confirmada novamente ao comprar.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
               </div>
 
               {quotedPrice !== null && quote.canAfford === false && <div className={styles.warnNotice}>
@@ -392,7 +392,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
               </div>
 
               <p className={styles.modalText}>
-                A Central SMS comparou os pools disponíveis e priorizou a maior taxa de sucesso, usando o menor preço como desempate.
+                A Central SMS comparou as rotas disponíveis e priorizou a maior taxa de sucesso, usando o menor preço como desempate.
               </p>
 
               <button
@@ -420,7 +420,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                 <div className={styles.guideIcon}>🧾</div>
                 <div>
                   <strong>Confira antes de confirmar</strong>
-                  <p>Ao confirmar, o servidor revalida pool, preço, estoque, saldo e allow-list antes de qualquer débito.</p>
+                  <p>Ao confirmar, o servidor revalida rota, preço, estoque, saldo e allow-list antes de qualquer débito.</p>
                 </div>
               </div>
 
@@ -428,7 +428,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                 <div><span>Produto</span><strong>Número para {selectedOffer.label}</strong></div>
                 <div><span>País do número</span><strong>{selectedOffer.countryName}</strong></div>
                 <div><span>Tipo</span><strong>Ativação única</strong></div>
-                <div><span>Pool selecionado</span><strong>{quote.selection.pool}</strong></div>
+                <div><span>Rota selecionada</span><strong>Otimizada</strong></div>
                 <div><span>Taxa de sucesso</span><strong>{quote.selection.successRate !== null ? `${quote.selection.successRate}%` : "—"}</strong></div>
                 <div className={styles.quoteTotal}><span>Preço final</span><strong>{quotedPrice !== null ? formatMoney(quotedPrice) : "—"}</strong></div>
                 <div><span>Saldo atual</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
@@ -440,7 +440,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
               </div>
 
               <div className={styles.okNotice}>
-                O preço, o pool e o estoque serão conferidos novamente no servidor. Se o melhor pool mudar ou o preço subir, a compra será interrompida para uma nova revisão. Em caso de expiração/reembolso confirmado pelo fornecedor, o valor da ativação volta automaticamente para sua carteira.
+                O preço, a rota e o estoque serão conferidos novamente no servidor. Se a melhor rota mudar ou o preço subir, a compra será interrompida para uma nova revisão. Em caso de expiração/reembolso confirmado pelo fornecedor, o valor da ativação volta automaticamente para sua carteira.
               </div>
 
               <button
