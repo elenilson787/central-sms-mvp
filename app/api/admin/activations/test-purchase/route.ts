@@ -6,8 +6,10 @@ import { listSmsPoolLiveCatalog, quoteSmsPoolCatalogOffer } from "@/src/provider
 import { isAdminRequest } from "@/src/security/admin-auth";
 import { getWalletBalanceCents } from "@/src/wallet/service";
 
-const PURCHASE_CONFIRMATION = "BUY_ONE_REAL_YOUTUBE_BR";
-const POLICY_CONFIRMATION = "APPROVE_YOUTUBE_BR_STANDARD";
+const TEST_SERVICE_LABEL = "Discord";
+const TEST_COUNTRY_SELECTOR = "BR";
+const PURCHASE_CONFIRMATION = "BUY_ONE_REAL_DISCORD_BR";
+const POLICY_CONFIRMATION = "APPROVE_DISCORD_BR_STANDARD";
 
 type RequestBody = {
   action?: "preview" | "approve_service" | "execute";
@@ -20,11 +22,12 @@ function safeError(error: unknown) {
   return String(error instanceof Error ? error.message : error).slice(0, 500);
 }
 
-async function resolveYouTubeBrazilOffer() {
-  const catalog = await listSmsPoolLiveCatalog("BR");
-  const offer = catalog.offers.find((item) => item.label.trim().toLowerCase() === "youtube")
-    ?? catalog.offers.find((item) => item.label.toLowerCase().includes("youtube"));
-  if (!offer) throw new Error("YOUTUBE_BR_OFFER_NOT_FOUND");
+async function resolveDiscordBrazilOffer() {
+  const catalog = await listSmsPoolLiveCatalog(TEST_COUNTRY_SELECTOR);
+  const expected = TEST_SERVICE_LABEL.toLowerCase();
+  const offer = catalog.offers.find((item) => item.label.trim().toLowerCase() === expected)
+    ?? catalog.offers.find((item) => item.label.toLowerCase().includes(expected));
+  if (!offer) throw new Error("DISCORD_BR_OFFER_NOT_FOUND");
 
   const quote = await quoteSmsPoolCatalogOffer(offer.id);
   return { offer: quote.offer, quote };
@@ -32,7 +35,7 @@ async function resolveYouTubeBrazilOffer() {
 
 async function buildPreview(userId: string) {
   const [{ offer, quote }, walletBalanceCents] = await Promise.all([
-    resolveYouTubeBrazilOffer(),
+    resolveDiscordBrazilOffer(),
     getWalletBalanceCents(userId),
   ]);
 
@@ -97,8 +100,8 @@ async function buildPreview(userId: string) {
   };
 }
 
-async function approveYouTubeBrazilService() {
-  const { offer } = await resolveYouTubeBrazilOffer();
+async function approveDiscordBrazilService() {
+  const { offer } = await resolveDiscordBrazilOffer();
   const supabase = getSupabaseAdmin();
   const existing = await supabase
     .from("service_policies")
@@ -123,7 +126,7 @@ async function approveYouTubeBrazilService() {
       .update({
         enabled: true,
         risk_category: "standard",
-        notes: "Admin-approved for the controlled YouTube/Brazil SMSPool test after written commercial approval.",
+        notes: "Admin-approved for the controlled Discord/Brazil SMSPool test after written commercial approval.",
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.data.id)
@@ -141,7 +144,7 @@ async function approveYouTubeBrazilService() {
       product: offer.product,
       enabled: true,
       risk_category: "standard",
-      notes: "Admin-approved for the controlled YouTube/Brazil SMSPool test after written commercial approval.",
+      notes: "Admin-approved for the controlled Discord/Brazil SMSPool test after written commercial approval.",
     })
     .select("provider,product,enabled,risk_category,notes")
     .single();
@@ -174,7 +177,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "explicit_policy_confirmation_required" }, { status: 400 });
       }
 
-      const approved = await approveYouTubeBrazilService();
+      const approved = await approveDiscordBrazilService();
       const preview = await buildPreview(userId);
       return Response.json({
         ok: true,
@@ -231,7 +234,7 @@ export async function POST(request: Request) {
       "OFFER_NOT_AVAILABLE",
       "INSUFFICIENT_BALANCE",
       "PRICING_NOT_CONFIGURED",
-      "YOUTUBE_BR_OFFER_NOT_FOUND",
+      "DISCORD_BR_OFFER_NOT_FOUND",
       "SMSPOOL_OFFER_NOT_FOUND",
     ].some((code) => message.includes(code));
 
