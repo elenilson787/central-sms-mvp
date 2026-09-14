@@ -20,6 +20,24 @@ type RentalDiagnosticGroup = {
   error: string | null;
 };
 
+type GlobalGuardrails = {
+  ok: boolean;
+  error: string | null;
+  purchasesLastHour?: number;
+  purchasesLast24h?: number;
+  salesLast24hCents?: number;
+  providerSpendLast24hUsd?: number;
+  maxPurchasesPerHour?: number;
+  maxPurchasesPerDay?: number;
+  maxSalesLast24hCents?: number;
+  maxProviderSpendLast24hUsd?: number;
+  circuitBreakerOpen?: boolean;
+  circuitBreakerConsecutiveFailures?: number;
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerWindowMinutes?: number;
+  circuitBreakerResetAt?: string | null;
+};
+
 type Diagnostic = {
   ok: boolean;
   provider: string;
@@ -46,6 +64,7 @@ type Diagnostic = {
     type0: RentalDiagnosticGroup;
     type1: RentalDiagnosticGroup;
   };
+  globalGuardrails?: GlobalGuardrails;
   safety?: {
     purchasesEnabled: boolean;
     commercialApproved: boolean;
@@ -56,6 +75,12 @@ type Diagnostic = {
     betaMaxDailySpendBrlCents: number;
     betaMaxPendingActivations: number;
     betaMaxPendingPerService: number;
+    betaGlobalMaxPurchasesPerHour: number;
+    betaGlobalMaxPurchasesPerDay: number;
+    betaGlobalMaxSalesBrlCentsPerDay: number;
+    betaGlobalMaxProviderSpendUsdPerDay: number;
+    betaCircuitBreakerFailures: number;
+    betaCircuitBreakerWindowMinutes: number;
     smsPoolMinBalance: number;
     minimumSalePriceBrlCents: number;
     minimumGrossMarginPercent: number;
@@ -71,6 +96,12 @@ function money(value: number | null | undefined, currency = "USD") {
 
 function cents(value: number | null | undefined) {
   return money(value === null || value === undefined ? null : value / 100, "BRL");
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("pt-BR");
 }
 
 function RentalTable({ title, group }: { title: string; group?: RentalDiagnosticGroup }) {
@@ -162,11 +193,11 @@ export default function SmsPoolAdminPage() {
           <div><strong>Compra real liberada</strong><br /><span className={styles.badge}>{String(data.safety?.livePurchasesAllowed)}</span></div>
           <div><strong>Modo beta público</strong><br /><span className={styles.badge}>{String(data.safety?.betaMode)}</span></div>
         </div>
-        <p className={styles.muted}>O beta público não exige cadastro prévio de usuários. As compras ficam protegidas por limites por usuário, margem mínima e reserva de saldo do provider.</p>
+        <p className={styles.muted}>O beta público não exige cadastro prévio de usuários. As compras ficam protegidas por limites por usuário, orçamento global, margem mínima, reserva de saldo e circuit breaker.</p>
       </section>
 
       <section className={styles.card}>
-        <h2>Limites do beta público</h2>
+        <h2>Limites por usuário</h2>
         <div className={styles.grid}>
           <div><strong>Compras por hora</strong><br />{data.safety?.betaMaxPurchasesPerHour ?? "—"}</div>
           <div><strong>Compras por 24h</strong><br />{data.safety?.betaMaxPurchasesPerDay ?? "—"}</div>
@@ -177,6 +208,33 @@ export default function SmsPoolAdminPage() {
           <div><strong>Preço mínimo</strong><br />{cents(data.safety?.minimumSalePriceBrlCents)}</div>
           <div><strong>Margem mínima</strong><br />{data.safety?.minimumGrossMarginPercent ?? "—"}% + {cents(data.safety?.minimumGrossMarginBrlCents)}</div>
         </div>
+      </section>
+
+      <section className={styles.card}>
+        <h2>Orçamento global do beta</h2>
+        {!data.globalGuardrails?.ok && <div className={styles.error}>
+          Não foi possível calcular os limites globais: {data.globalGuardrails?.error ?? "sem resposta"}
+        </div>}
+        {data.globalGuardrails?.ok && <>
+          <div className={styles.grid}>
+            <div><strong>Compras na última hora</strong><br />{data.globalGuardrails.purchasesLastHour ?? 0} / {data.globalGuardrails.maxPurchasesPerHour ?? data.safety?.betaGlobalMaxPurchasesPerHour ?? "—"}</div>
+            <div><strong>Compras nas últimas 24h</strong><br />{data.globalGuardrails.purchasesLast24h ?? 0} / {data.globalGuardrails.maxPurchasesPerDay ?? data.safety?.betaGlobalMaxPurchasesPerDay ?? "—"}</div>
+            <div><strong>Vendas nas últimas 24h</strong><br />{cents(data.globalGuardrails.salesLast24hCents)} / {cents(data.globalGuardrails.maxSalesLast24hCents)}</div>
+            <div><strong>Custo provider nas últimas 24h</strong><br />{money(data.globalGuardrails.providerSpendLast24hUsd, "USD")} / {money(data.globalGuardrails.maxProviderSpendLast24hUsd, "USD")}</div>
+          </div>
+          <p className={styles.muted}>Os limites globais valem para todos os usuários somados e impedem que tráfego inesperado consuma o saldo do provider além do orçamento do beta.</p>
+        </>}
+      </section>
+
+      <section className={styles.card}>
+        <h2>Circuit breaker</h2>
+        <div className={styles.grid}>
+          <div><strong>Status</strong><br /><span className={styles.badge}>{data.globalGuardrails?.circuitBreakerOpen ? "ABERTO — compras pausadas" : "Fechado — normal"}</span></div>
+          <div><strong>Falhas consecutivas</strong><br />{data.globalGuardrails?.circuitBreakerConsecutiveFailures ?? 0} / {data.globalGuardrails?.circuitBreakerFailureThreshold ?? data.safety?.betaCircuitBreakerFailures ?? "—"}</div>
+          <div><strong>Janela observada</strong><br />{data.globalGuardrails?.circuitBreakerWindowMinutes ?? data.safety?.betaCircuitBreakerWindowMinutes ?? "—"} min</div>
+          <div><strong>Reabertura automática</strong><br />{data.globalGuardrails?.circuitBreakerOpen ? dateTime(data.globalGuardrails.circuitBreakerResetAt) : "Não aplicável"}</div>
+        </div>
+        <p className={styles.muted}>Se ocorrerem falhas ou reembolsos consecutivos suficientes dentro da janela configurada, novas compras são pausadas automaticamente. O circuito fecha sozinho quando a sequência sai da janela.</p>
       </section>
 
       <section className={styles.card}>
