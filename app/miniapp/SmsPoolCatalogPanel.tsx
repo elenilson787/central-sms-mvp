@@ -18,7 +18,7 @@ type CatalogOffer = {
   label: string;
   description: string;
   kind: "ONE_TIME_SMS";
-  stock: null;
+  stock: number | null;
   salePriceCents: number | null;
   currency: "BRL";
   pricingConfigured: boolean;
