@@ -121,6 +121,16 @@ function dedupeByServiceCheapest(rows: SmsPoolPricing[]) {
   return [...selected.values()];
 }
 
+function dedupeByServiceAndPool(rows: SmsPoolPricing[]) {
+  const selected = new Map<string, SmsPoolPricing>();
+  for (const row of rows) {
+    const key = `${String(row.service)}:${String(row.pool)}`;
+    const existing = selected.get(key);
+    if (!existing || numeric(row.price) < numeric(existing.price)) selected.set(key, row);
+  }
+  return [...selected.values()];
+}
+
 export async function listSmsPoolLiveCatalog(countrySelector = "BR") {
   const countries = await retrieveSmsPoolCountries();
   const selectedCountry = resolveCountry(countries, countrySelector)
@@ -222,4 +232,48 @@ export async function quoteSmsPoolCatalogOffer(offerId: string): Promise<SmsPool
     salePriceCents,
     pricingConfigured: salePriceCents !== null,
   };
+}
+
+export async function quoteBestSmsPoolServicePool(input: {
+  countrySelector?: string;
+  serviceLabel: string;
+}): Promise<SmsPoolCatalogQuote> {
+  const countries = await retrieveSmsPoolCountries();
+  const selectedCountry = resolveCountry(countries, input.countrySelector ?? "BR")
+    ?? resolveCountry(countries, "BR")
+    ?? countries[0];
+  if (!selectedCountry) throw new Error("SMSPOOL_COUNTRY_NOT_FOUND");
+
+  const expected = input.serviceLabel.trim().toLowerCase();
+  const pricingRows = await retrieveSmsPoolPricing({ country: selectedCountry.ID });
+  const matchingRows = dedupeByServiceAndPool(pricingRows)
+    .filter((row) => numeric(row.price) > 0)
+    .filter((row) => isSmsPoolCatalogServiceVisible(String(row.service_name ?? "")))
+    .filter((row) => {
+      const label = String(row.service_name ?? "").trim().toLowerCase();
+      return label === expected || label.includes(expected);
+    });
+
+  if (!matchingRows.length) throw new Error("SMSPOOL_SERVICE_OFFER_NOT_FOUND");
+
+  const quoted = await Promise.all(matchingRows.map(async (row) => {
+    try {
+      return await quoteSmsPoolCatalogOffer(`smspool:${row.country}:${row.service}:${row.pool}`);
+    } catch {
+      return null;
+    }
+  }));
+
+  const available = quoted.filter((quote): quote is SmsPoolCatalogQuote => Boolean(quote && quote.stock > 0));
+  if (!available.length) throw new Error("SMSPOOL_SERVICE_NO_STOCK");
+
+  available.sort((a, b) => {
+    const aRate = Number.isFinite(Number(a.successRate)) ? Number(a.successRate) : -1;
+    const bRate = Number.isFinite(Number(b.successRate)) ? Number(b.successRate) : -1;
+    if (aRate !== bRate) return bRate - aRate;
+    if (a.providerPrice !== b.providerPrice) return a.providerPrice - b.providerPrice;
+    return String(a.offer.operator).localeCompare(String(b.offer.operator), "en");
+  });
+
+  return available[0];
 }

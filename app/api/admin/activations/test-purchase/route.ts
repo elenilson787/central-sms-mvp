@@ -2,7 +2,7 @@ import { purchaseActivation } from "@/src/activations/service";
 import { assertServiceAllowed, isRiskCategoryBlocked } from "@/src/compliance/policy";
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
-import { listSmsPoolLiveCatalog, quoteSmsPoolCatalogOffer } from "@/src/providers/smspool/catalog";
+import { quoteBestSmsPoolServicePool } from "@/src/providers/smspool/catalog";
 import { isAdminRequest } from "@/src/security/admin-auth";
 import { getWalletBalanceCents } from "@/src/wallet/service";
 
@@ -16,6 +16,7 @@ type RequestBody = {
   userId?: string;
   idempotencyKey?: string;
   confirmation?: string;
+  expectedOfferId?: string;
 };
 
 function safeError(error: unknown) {
@@ -23,13 +24,13 @@ function safeError(error: unknown) {
 }
 
 async function resolveDiscordBrazilOffer() {
-  const catalog = await listSmsPoolLiveCatalog(TEST_COUNTRY_SELECTOR);
+  const quote = await quoteBestSmsPoolServicePool({
+    countrySelector: TEST_COUNTRY_SELECTOR,
+    serviceLabel: TEST_SERVICE_LABEL,
+  });
   const expected = TEST_SERVICE_LABEL.toLowerCase();
-  const offer = catalog.offers.find((item) => item.label.trim().toLowerCase() === expected)
-    ?? catalog.offers.find((item) => item.label.toLowerCase().includes(expected));
-  if (!offer) throw new Error("DISCORD_BR_OFFER_NOT_FOUND");
-
-  const quote = await quoteSmsPoolCatalogOffer(offer.id);
+  const label = quote.offer.label.trim().toLowerCase();
+  if (label !== expected && !label.includes(expected)) throw new Error("DISCORD_BR_OFFER_NOT_FOUND");
   return { offer: quote.offer, quote };
 }
 
@@ -69,6 +70,9 @@ async function buildPreview(userId: string) {
       product: offer.product,
       providerPrice: quote.providerPrice,
       providerCurrency: quote.providerCurrency,
+    },
+    selection: {
+      strategy: "highest_success_rate_then_lowest_price" as const,
     },
     price: {
       salePriceCents,
@@ -200,6 +204,12 @@ export async function POST(request: Request) {
     const idempotencyKey = String(body.idempotencyKey ?? "").trim();
     if (!idempotencyKey) return Response.json({ error: "idempotency_key_required" }, { status: 400 });
 
+    const expectedOfferId = String(body.expectedOfferId ?? "").trim();
+    if (!expectedOfferId) return Response.json({ error: "confirmed_offer_id_required" }, { status: 400 });
+    if (expectedOfferId !== preview.offer.id) {
+      return Response.json({ ok: false, error: "OFFER_CHANGED_REVIEW_REQUIRED", preview }, { status: 409 });
+    }
+
     if (!preview.canExecute) {
       return Response.json({ ok: false, error: "test_purchase_not_ready", preview }, { status: 409 });
     }
@@ -235,7 +245,10 @@ export async function POST(request: Request) {
       "INSUFFICIENT_BALANCE",
       "PRICING_NOT_CONFIGURED",
       "DISCORD_BR_OFFER_NOT_FOUND",
+      "SMSPOOL_SERVICE_OFFER_NOT_FOUND",
+      "SMSPOOL_SERVICE_NO_STOCK",
       "SMSPOOL_OFFER_NOT_FOUND",
+      "OFFER_CHANGED_REVIEW_REQUIRED",
     ].some((code) => message.includes(code));
 
     return Response.json({ ok: false, error: message }, { status: expected ? 409 : 502 });
