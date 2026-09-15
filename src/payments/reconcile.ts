@@ -5,6 +5,7 @@ import {
   normalizeOrderStatus,
   orderAmountCents,
   orderIsAccredited,
+  orderIsFullyRefunded,
   primaryOrderPayment,
 } from "@/src/payments/mercadopago";
 import { applyWalletTransaction } from "@/src/wallet/service";
@@ -19,6 +20,68 @@ type LocalPayment = {
   status: string;
   paid_at?: string | null;
 };
+
+async function reverseCreditedDepositForProviderRefund(input: {
+  local: LocalPayment;
+  orderId: string;
+  externalPaymentId?: string | number | null;
+}) {
+  const supabase = getSupabaseAdmin();
+  const creditReference = `payment:${input.local.id}:credit`;
+
+  const originalCredit = await supabase
+    .from("wallet_transactions")
+    .select("id")
+    .eq("user_id", input.local.user_id)
+    .eq("type", "deposit")
+    .eq("reference_id", creditReference)
+    .maybeSingle();
+  if (originalCredit.error) throw originalCredit.error;
+
+  // A provider refund must only reverse money that was actually credited to
+  // the internal wallet. This also covers approval callbacks that failed before
+  // creating the deposit ledger row.
+  if (!originalCredit.data) return { reversed: false, reason: "deposit_not_credited" as const };
+
+  const managedRefund = await supabase
+    .from("payment_refunds")
+    .select("id,status")
+    .eq("payment_id", input.local.id)
+    .maybeSingle();
+  if (managedRefund.error) throw managedRefund.error;
+
+  // When the refund originated from our admin flow, reuse exactly the same
+  // deterministic reservation reference. This makes a provider webhook racing
+  // with the admin request idempotent instead of debiting the wallet twice.
+  const reversalReference = managedRefund.data?.id
+    ? `payment-refund:${managedRefund.data.id}:reserve`
+    : `payment:${input.local.id}:provider-refund-reversal`;
+
+  try {
+    await applyWalletTransaction({
+      userId: input.local.user_id,
+      type: "refund",
+      amountCents: -Number(input.local.amount_cents),
+      referenceId: reversalReference,
+      metadata: {
+        source: managedRefund.data?.id ? "admin_refund_provider_confirmation" : "mercado_pago_provider_refund",
+        paymentId: input.local.id,
+        externalOrderId: input.orderId,
+        externalPaymentId: input.externalPaymentId ?? null,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase
+      .from("payments")
+      .update({ status: "refund_reversal_pending", updated_at: new Date().toISOString() })
+      .eq("id", input.local.id)
+      .eq("environment", input.local.environment);
+    throw new Error(`PAYMENT_REFUND_REVERSAL_PENDING:${message}`);
+  }
+
+  return { reversed: true, reason: null };
+}
 
 export async function reconcileMercadoPagoOrder(externalOrderId: string) {
   const environment = currentPaymentEnvironment();
@@ -72,6 +135,36 @@ export async function reconcileMercadoPagoOrder(externalOrderId: string) {
   }
 
   const accredited = orderIsAccredited(order);
+  const fullyRefunded = orderIsFullyRefunded(order);
+
+  if (fullyRefunded) {
+    const reversal = await reverseCreditedDepositForProviderRefund({
+      local,
+      orderId,
+      externalPaymentId: payment?.id ?? null,
+    });
+
+    const refundUpdate = await supabase
+      .from("payments")
+      .update({
+        external_payment_id: orderId,
+        status: "refunded",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", local.id)
+      .eq("environment", environment);
+    if (refundUpdate.error) throw refundUpdate.error;
+
+    return {
+      ok: true,
+      localPaymentId: local.id,
+      paymentStatus: "refunded",
+      credited: false,
+      reversed: reversal.reversed,
+      reversalReason: reversal.reason,
+    };
+  }
+
   const paidAt = accredited ? (local.paid_at ?? new Date().toISOString()) : local.paid_at;
   const update = await supabase
     .from("payments")

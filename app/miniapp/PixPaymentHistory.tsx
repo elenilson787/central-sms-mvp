@@ -26,6 +26,10 @@ function statusLabel(status: string) {
     pending: "Aguardando pagamento",
     in_process: "Em análise",
     approved: "Pago",
+    refunded: "Reembolsado",
+    refund_reversal_pending: "Reembolso em conciliação",
+    partial_refund_review: "Reembolso parcial em revisão",
+    chargeback_review: "Contestação em revisão",
     rejected: "Rejeitado",
     cancelled: "Cancelado",
     failed: "Falhou",
@@ -36,6 +40,7 @@ function statusLabel(status: string) {
 
 function statusClass(status: string) {
   if (status === "approved") return styles.approved;
+  if (status === "refunded") return styles.failed;
   if (status === "rejected" || status === "cancelled" || status === "failed" || status === "integrity_mismatch") return styles.failed;
   return styles.pending;
 }

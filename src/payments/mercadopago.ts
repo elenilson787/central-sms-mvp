@@ -203,8 +203,19 @@ export function orderIsAccredited(order: MercadoPagoOrder) {
     payment?.status_detail === "accredited";
 }
 
+export function orderIsFullyRefunded(order: MercadoPagoOrder) {
+  const payment = primaryOrderPayment(order);
+  const orderRefunded = order.status === "refunded" && order.status_detail === "refunded";
+  const chargebackReimbursed = order.status === "charged_back" && order.status_detail === "reimbursed";
+  const paymentRefunded = payment?.status === "refunded" && payment?.status_detail === "refunded";
+  return orderRefunded || chargebackReimbursed || paymentRefunded;
+}
+
 export function normalizeOrderStatus(order: MercadoPagoOrder) {
   if (orderIsAccredited(order)) return "approved";
+  if (orderIsFullyRefunded(order)) return "refunded";
+  if (order.status === "processed" && order.status_detail === "partially_refunded") return "partial_refund_review";
+  if (order.status === "charged_back") return "chargeback_review";
   if (order.status === "action_required" || order.status === "created") return "pending";
   if (order.status === "processing") return "in_process";
   if (order.status === "cancelled" || order.status === "canceled" || order.status === "expired") return "cancelled";
