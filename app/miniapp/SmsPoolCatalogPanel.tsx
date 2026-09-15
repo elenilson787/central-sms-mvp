@@ -173,15 +173,13 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
   }, [offers, searchQuery]);
 
   const availableFeaturedServices = useMemo(() => {
-    const availableOffers = offers.filter((offer) => (
-      offer.stock !== null
-      && offer.stock > 0
-      && offer.pricingConfigured
+    const catalogOffers = offers.filter((offer) => (
+      offer.pricingConfigured
       && offer.salePriceCents !== null
     ));
 
     return FEATURED_SERVICES.flatMap((featured) => {
-      const bestMatch = availableOffers
+      const bestMatch = catalogOffers
         .map((offer) => ({ offer, score: featuredMatchScore(offer, featured.aliases) }))
         .filter((candidate) => candidate.score > 0)
         .sort((a, b) => b.score - a.score || (a.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER) - (b.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER))[0]?.offer;
@@ -363,8 +361,8 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
             placeholder="Ex.: Discord, Telegram, Instagram"
             autoComplete="off"
           />
-          {!loading && availableFeaturedServices.length > 0 && <div className={styles.quickSearches} aria-label="Serviços populares disponíveis agora">
-            <span>Disponíveis agora:</span>
+          {!loading && availableFeaturedServices.length > 0 && <div className={styles.quickSearches} aria-label="Serviços populares disponíveis para consulta">
+            <span>Serviços populares:</span>
             {availableFeaturedServices.map((item) => (
               <button
                 key={item.displayLabel}
@@ -376,6 +374,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
               </button>
             ))}
           </div>}
+          {!loading && availableFeaturedServices.length > 0 && <span className={styles.helperText}>O estoque é confirmado em tempo real quando você abre a cotação.</span>}
 
           <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
           <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
