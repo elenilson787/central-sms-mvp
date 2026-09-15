@@ -1,12 +1,13 @@
 import { getPublicBetaGlobalGuardrailSnapshot } from "@/src/commercial/purchase-guardrails";
 import { env } from "@/src/config/env";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
-import { retrieveSmsPoolBalance } from "@/src/providers/smspool/client";
+import { retrieveSmsPoolBalance, retrieveSmsPoolServices } from "@/src/providers/smspool/client";
 import { isAdminRequest } from "@/src/security/admin-auth";
 
 const PENDING_STATUSES = new Set(["creating", "number_received", "waiting_sms"]);
 const SUCCESS_STATUSES = new Set(["sms_received", "completed"]);
 const FAILURE_STATUSES = new Set(["failed", "refunded", "expired"]);
+const MIN_REFUND_ALERT_SAMPLE = 5;
 
 type AlertLevel = "critical" | "warning" | "info";
 type DashboardAlert = { level: AlertLevel; code: string; message: string };
@@ -123,12 +124,23 @@ export async function GET(request: Request) {
 
   let providerBalance: number | null = null;
   let providerBalanceError: string | null = null;
-  try {
-    const balance = await retrieveSmsPoolBalance();
-    const numeric = Number(balance.balance);
+  const serviceNameByProduct = new Map<string, string>();
+  const [balanceResult, servicesResult] = await Promise.allSettled([
+    retrieveSmsPoolBalance(),
+    retrieveSmsPoolServices(),
+  ]);
+
+  if (balanceResult.status === "fulfilled") {
+    const numeric = Number(balanceResult.value.balance);
     providerBalance = Number.isFinite(numeric) ? numeric : null;
-  } catch (cause) {
-    providerBalanceError = cause instanceof Error ? cause.message : "SMSPOOL_BALANCE_FAILED";
+  } else {
+    providerBalanceError = balanceResult.reason instanceof Error ? balanceResult.reason.message : "SMSPOOL_BALANCE_FAILED";
+  }
+
+  if (servicesResult.status === "fulfilled") {
+    for (const service of servicesResult.value) {
+      serviceNameByProduct.set(String(service.ID), String(service.name));
+    }
   }
 
   const alerts: DashboardAlert[] = [];
@@ -146,8 +158,14 @@ export async function GET(request: Request) {
     alerts.push({ level: "warning", code: "provider_balance_near_reserve", message: `Saldo SMSPool próximo da reserva mínima: ${providerBalance.toFixed(2)} ${env.smsPoolPriceCurrency}.` });
   }
 
-  if (terminalTotal >= 3 && refundRate >= 25) {
-    alerts.push({ level: "warning", code: "refund_rate_high", message: `Taxa de reembolso de ativações elevada nas últimas 24h: ${refundRate.toFixed(1)}%.` });
+  if (terminalTotal > 0 && terminalTotal < MIN_REFUND_ALERT_SAMPLE && activationRefunds > 0) {
+    alerts.push({
+      level: "info",
+      code: "refund_rate_small_sample",
+      message: `Amostra ainda pequena: taxa de reembolso atual ${refundRate.toFixed(1)}% (${activationRefunds} de ${terminalTotal} ativações). O alerta de taxa elevada passa a valer a partir de ${MIN_REFUND_ALERT_SAMPLE} ativações finalizadas.`,
+    });
+  } else if (terminalTotal >= MIN_REFUND_ALERT_SAMPLE && refundRate >= 25) {
+    alerts.push({ level: "warning", code: "refund_rate_high", message: `Taxa de reembolso de ativações elevada nas últimas 24h: ${refundRate.toFixed(1)}% (${activationRefunds} de ${terminalTotal}).` });
   }
 
   if (grossMarginPercent !== null && costConversionComplete && (
@@ -172,18 +190,24 @@ export async function GET(request: Request) {
   if (!alerts.length) alerts.push({ level: "info", code: "operations_normal", message: "Nenhum alerta operacional relevante nas últimas 24 horas." });
 
   const activity = [
-    ...activations.slice(0, 12).map((row) => ({
-      id: String(row.id),
-      kind: "activation" as const,
-      title: `SMS ${String(row.product)}`,
-      status: String(row.status),
-      amountCents: Math.max(0, Math.trunc(numberValue(row.sale_price_cents))),
-      createdAt: String(row.created_at),
-    })),
+    ...activations.slice(0, 12).map((row) => {
+      const product = String(row.product);
+      const serviceName = serviceNameByProduct.get(product) ?? null;
+      return {
+        id: String(row.id),
+        kind: "activation" as const,
+        title: serviceName ?? `SMS ${product}`,
+        detail: serviceName ? `SMSPool ID ${product}` : null,
+        status: String(row.status),
+        amountCents: Math.max(0, Math.trunc(numberValue(row.sale_price_cents))),
+        createdAt: String(row.created_at),
+      };
+    }),
     ...payments.slice(0, 12).map((row) => ({
       id: String(row.id),
       kind: "pix" as const,
       title: "Recarga PIX",
+      detail: null,
       status: String(row.status),
       amountCents: Math.max(0, Math.trunc(numberValue(row.amount_cents))),
       createdAt: String(row.paid_at ?? row.created_at),
@@ -208,6 +232,10 @@ export async function GET(request: Request) {
       smsReceived,
       activationRefunds,
       pendingActivations: pending,
+      terminalSuccesses,
+      terminalFailures,
+      terminalTotal,
+      refundRate,
       realSuccessRate,
     },
     provider: {
@@ -220,6 +248,7 @@ export async function GET(request: Request) {
     policy: {
       minimumGrossMarginPercent: env.minimumGrossMarginPercent,
       minimumGrossMarginBrlCents: env.minimumGrossMarginBrlCents,
+      minimumRefundAlertSample: MIN_REFUND_ALERT_SAMPLE,
     },
     alerts,
     recentActivity: activity,
