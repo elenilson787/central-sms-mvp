@@ -1,4 +1,5 @@
 import { purchaseActivation } from "@/src/activations/service";
+import { friendlyPurchaseFailure } from "@/src/commercial/purchase-error-message";
 import {
   assertPublicBetaGlobalGuardrails,
   assertPublicBetaUserGuardrails,
@@ -20,6 +21,13 @@ type RequestBody = {
   reviewedSalePriceCents?: number;
   idempotencyKey?: string;
   confirmation?: string;
+};
+
+type PurchaseFailureContext = {
+  userId?: string;
+  salePriceCents?: number;
+  providerPrice?: number;
+  providerCurrency?: string;
 };
 
 function safeError(error: unknown) {
@@ -54,6 +62,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "EXPLICIT_CONFIRMATION_REQUIRED" }, { status: 400 });
   }
 
+  const failureContext: PurchaseFailureContext = {};
+
   try {
     const validated = await validateTelegramMiniAppInitData(body.initData ?? "", env.telegramBotToken, {
       maxAgeSeconds: 3600,
@@ -64,10 +74,15 @@ export async function POST(request: Request) {
       limit: 4,
       windowSeconds: 60,
     });
-    if (!allowed) return Response.json({ error: "RATE_LIMITED" }, { status: 429 });
+    if (!allowed) throw new Error("RATE_LIMITED");
 
     const session = await getOrCreateMiniAppSession(validated.user);
+    failureContext.userId = session.user.id;
+
     const bestQuote = await quoteBestSmsPoolPoolForOffer(reviewedOfferId);
+    failureContext.salePriceCents = bestQuote.salePriceCents ?? undefined;
+    failureContext.providerPrice = bestQuote.providerPrice;
+    failureContext.providerCurrency = bestQuote.providerCurrency;
 
     await assertServiceAllowed("smspool", bestQuote.offer.product);
 
@@ -92,7 +107,7 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: "OFFER_NOT_AVAILABLE" }, { status: 409 });
     }
     if (session.wallet.balanceCents < bestQuote.salePriceCents) {
-      return Response.json({ ok: false, error: "INSUFFICIENT_BALANCE" }, { status: 409 });
+      throw new Error("INSUFFICIENT_BALANCE");
     }
 
     // Public beta is open to any authenticated Telegram user; safety comes from
@@ -154,6 +169,7 @@ export async function POST(request: Request) {
       "BETA_GLOBAL_PROVIDER_SPEND_LIMIT",
     ].some((code) => message.includes(code));
     const circuitBreakerOpen = message.includes("BETA_CIRCUIT_BREAKER_OPEN");
+    const rateLimited = message.includes("RATE_LIMITED");
 
     const expected = [
       "PURCHASES_DISABLED",
@@ -181,12 +197,31 @@ export async function POST(request: Request) {
       "BETA_GLOBAL_PROVIDER_SPEND_LIMIT",
       "BETA_GLOBAL_PROVIDER_SPEND_CURRENCY_UNSUPPORTED",
       "BETA_CIRCUIT_BREAKER_OPEN",
+      "RATE_LIMITED",
     ].some((code) => message.includes(code));
 
-    console.error("[miniapp-real-purchase] failed", { message });
+    const friendly = await friendlyPurchaseFailure({
+      code: message,
+      userId: failureContext.userId,
+      salePriceCents: failureContext.salePriceCents,
+      providerPrice: failureContext.providerPrice,
+      providerCurrency: failureContext.providerCurrency,
+    });
+
+    console.error("[miniapp-real-purchase] failed", {
+      code: message,
+      retryAt: friendly.retryAt,
+    });
+
     return Response.json(
-      { ok: false, error: message },
-      { status: circuitBreakerOpen ? 503 : betaLimit ? 429 : expected ? 409 : 502 },
+      {
+        ok: false,
+        error: friendly.message,
+        errorCode: friendly.code,
+        retryAt: friendly.retryAt,
+        retryAfterSeconds: friendly.retryAfterSeconds,
+      },
+      { status: circuitBreakerOpen ? 503 : betaLimit || rateLimited ? 429 : expected ? 409 : 502 },
     );
   }
 }
