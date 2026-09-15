@@ -72,6 +72,19 @@ type FeaturedService = {
   aliases: string[];
 };
 
+type FeaturedCandidate = {
+  displayLabel: string;
+  offer: CatalogOffer;
+};
+
+type QualityTier = "good" | "moderate" | "low" | "unknown" | "unavailable";
+
+type FeaturedQuality = {
+  successRate: number | null;
+  stock: number;
+  tier: QualityTier;
+};
+
 const FEATURED_SERVICES: FeaturedService[] = [
   { label: "Discord", aliases: ["discord"] },
   { label: "Telegram", aliases: ["telegram"] },
@@ -83,6 +96,9 @@ const FEATURED_SERVICES: FeaturedService[] = [
   { label: "Facebook", aliases: ["facebook"] },
   { label: "YouTube", aliases: ["youtube", "you tube"] },
 ];
+
+const RECOMMENDED_SUCCESS_RATE = 60;
+const MODERATE_SUCCESS_RATE = 40;
 
 function normalizeServiceName(value: string) {
   return value
@@ -106,6 +122,14 @@ function featuredMatchScore(offer: CatalogOffer, aliases: string[]) {
     else if (description.includes(alias)) best = Math.max(best, 20);
   }
   return best;
+}
+
+function qualityTier(successRate: number | null, stock: number): QualityTier {
+  if (stock <= 0) return "unavailable";
+  if (successRate === null) return "unknown";
+  if (successRate >= RECOMMENDED_SUCCESS_RATE) return "good";
+  if (successRate >= MODERATE_SUCCESS_RATE) return "moderate";
+  return "low";
 }
 
 function formatMoney(cents: number, currency = "BRL") {
@@ -132,6 +156,8 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [reviewingPurchase, setReviewingPurchase] = useState(false);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [featuredQuality, setFeaturedQuality] = useState<Record<string, FeaturedQuality>>({});
+  const [featuredQualityLoading, setFeaturedQualityLoading] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
   const purchaseKeyRef = useRef<string | null>(null);
 
@@ -140,6 +166,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
     if (!webApp?.initData) return;
     setLoading(true);
     setError(null);
+    setFeaturedQuality({});
     try {
       const response = await fetch("/api/telegram/miniapp/catalog", {
         method: "POST",
@@ -172,7 +199,7 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
     return offers.filter((offer) => `${offer.label} ${offer.countryName}`.toLocaleLowerCase("pt-BR").includes(query));
   }, [offers, searchQuery]);
 
-  const availableFeaturedServices = useMemo(() => {
+  const featuredCandidates = useMemo<FeaturedCandidate[]>(() => {
     const catalogOffers = offers.filter((offer) => (
       offer.pricingConfigured
       && offer.salePriceCents !== null
@@ -185,10 +212,57 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
         .sort((a, b) => b.score - a.score || (a.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER) - (b.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER))[0]?.offer;
 
       return bestMatch
-        ? [{ displayLabel: featured.label, searchValue: bestMatch.label }]
+        ? [{ displayLabel: featured.label, offer: bestMatch }]
         : [];
     });
   }, [offers]);
+
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    if (!webApp?.initData || featuredCandidates.length === 0) {
+      setFeaturedQuality({});
+      setFeaturedQualityLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFeaturedQualityLoading(true);
+
+    void Promise.all(featuredCandidates.map(async ({ offer }) => {
+      try {
+        const response = await fetch("/api/telegram/miniapp/catalog/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ initData: webApp.initData, offerId: offer.id }),
+        });
+        const payload = await response.json() as QuotePayload | { error?: string };
+        if (!response.ok || !("ok" in payload)) {
+          return [offer.id, { successRate: null, stock: 0, tier: "unavailable" as const }] as const;
+        }
+        const quotePayload = payload as QuotePayload;
+        const successRate = quotePayload.availability.successRate;
+        const stock = quotePayload.availability.stock;
+        return [offer.id, { successRate, stock, tier: qualityTier(successRate, stock) }] as const;
+      } catch {
+        return [offer.id, { successRate: null, stock: 0, tier: "unavailable" as const }] as const;
+      }
+    })).then((entries) => {
+      if (!cancelled) setFeaturedQuality(Object.fromEntries(entries));
+    }).finally(() => {
+      if (!cancelled) setFeaturedQualityLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [featuredCandidates]);
+
+  const availableFeaturedServices = useMemo(() => (
+    featuredCandidates.flatMap(({ displayLabel, offer }) => {
+      const quality = featuredQuality[offer.id];
+      return quality?.tier === "good"
+        ? [{ displayLabel, searchValue: offer.label, successRate: quality.successRate }]
+        : [];
+    })
+  ), [featuredCandidates, featuredQuality]);
 
   function closeQuote() {
     setSelectedOffer(null);
@@ -296,6 +370,8 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
   }
 
   const quotedPrice = quote?.price.salePriceCents ?? null;
+  const currentSuccessRate = quote?.availability.successRate ?? null;
+  const currentQualityTier = quote ? qualityTier(currentSuccessRate, quote.availability.stock) : null;
   const canReviewPurchase = Boolean(
     quote
     && quote.availability.stock > 0
@@ -361,8 +437,9 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
             placeholder="Ex.: Discord, Telegram, Instagram"
             autoComplete="off"
           />
-          {!loading && availableFeaturedServices.length > 0 && <div className={styles.quickSearches} aria-label="Serviços populares disponíveis para consulta">
-            <span>Serviços populares:</span>
+          {!loading && featuredQualityLoading && featuredCandidates.length > 0 && <span className={styles.helperText}>Verificando em tempo real quais serviços têm melhor taxa de sucesso…</span>}
+          {!loading && !featuredQualityLoading && availableFeaturedServices.length > 0 && <div className={styles.quickSearches} aria-label="Serviços recomendados agora">
+            <span>Recomendados agora:</span>
             {availableFeaturedServices.map((item) => (
               <button
                 key={item.displayLabel}
@@ -370,11 +447,12 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                 type="button"
                 onClick={() => setSearch(item.searchValue)}
               >
-                {item.displayLabel}
+                {item.displayLabel}{item.successRate !== null ? ` · ${item.successRate}%` : ""}
               </button>
             ))}
           </div>}
-          {!loading && availableFeaturedServices.length > 0 && <span className={styles.helperText}>O estoque é confirmado em tempo real quando você abre a cotação.</span>}
+          {!loading && !featuredQualityLoading && availableFeaturedServices.length > 0 && <span className={styles.helperText}>Mostramos aqui somente serviços cuja melhor rota está com taxa de sucesso de 60% ou mais. Estoque e qualidade são revalidados na cotação e na compra.</span>}
+          {!loading && !featuredQualityLoading && featuredCandidates.length > 0 && availableFeaturedServices.length === 0 && <span className={styles.helperText}>Nenhum serviço popular atingiu 60% de sucesso agora. Você ainda pode procurar qualquer serviço aprovado pela busca e decidir após ver a cotação.</span>}
 
           <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
           <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
@@ -446,6 +524,19 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                 <div><span>Seu saldo</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
               </div>
 
+              {currentQualityTier === "good" && <div className={styles.okNotice}>
+                <strong>Boa taxa de sucesso ({currentSuccessRate}%).</strong> Esta rota atende ao nível recomendado pela Central SMS neste momento.
+              </div>}
+              {currentQualityTier === "moderate" && <div className={styles.warnNotice}>
+                <strong>Disponibilidade moderada ({currentSuccessRate}%).</strong> A rota está abaixo do nível recomendado de 60%. Você pode continuar, mas existe uma chance maior de o SMS não chegar.
+              </div>}
+              {currentQualityTier === "low" && <div className={styles.warnNotice}>
+                <strong>Baixa taxa de sucesso ({currentSuccessRate}%).</strong> Você pode continuar se precisar deste serviço, mas há risco elevado de o SMS não chegar. Se o fornecedor encerrar a ativação sem SMS e confirmar o reembolso, o valor volta automaticamente para sua carteira.
+              </div>}
+              {currentQualityTier === "unknown" && <div className={styles.warnNotice}>
+                <strong>Taxa de sucesso não informada.</strong> O fornecedor tem estoque, mas não informou uma taxa de sucesso confiável para esta rota. Considere isso antes de continuar.
+              </div>}
+
               <div className={quote.availability.stock > 0 ? styles.okNotice : styles.warnNotice}>
                 {quote.availability.stock > 0 ? `Há números disponíveis para receber SMS do ${selectedOffer.label} agora. A disponibilidade será confirmada novamente ao comprar.` : `Não há números disponíveis para ${selectedOffer.label} neste momento.`}
               </div>
@@ -501,6 +592,16 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
                 <div><span>Saldo atual</span><strong>{formatMoney(quote.walletBalanceCents)}</strong></div>
                 <div><span>Saldo após a compra</span><strong>{balanceAfterPurchase !== null ? formatMoney(balanceAfterPurchase) : "—"}</strong></div>
               </div>
+
+              {currentQualityTier === "moderate" && <div className={styles.warnNotice}>
+                <strong>Disponibilidade moderada ({currentSuccessRate}%).</strong> Esta rota está abaixo dos 60% recomendados. Confirme somente se você aceita essa chance maior de falha.
+              </div>}
+              {currentQualityTier === "low" && <div className={styles.warnNotice}>
+                <strong>Baixa taxa de sucesso ({currentSuccessRate}%).</strong> Há risco elevado de o SMS não chegar. A compra continua disponível porque você pode precisar especificamente deste serviço.
+              </div>}
+              {currentQualityTier === "unknown" && <div className={styles.warnNotice}>
+                <strong>Taxa de sucesso não informada.</strong> Revise com atenção antes de confirmar a compra.
+              </div>}
 
               <div className={styles.warnNotice}>
                 <strong>Importante:</strong> esta compra entregará um número temporário para receber o SMS do {selectedOffer.label}. O número não será seu de forma permanente e pode não aceitar novos códigos depois que a ativação expirar.
