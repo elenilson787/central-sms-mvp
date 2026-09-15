@@ -116,7 +116,7 @@ export default function SmsPoolServicePoliciesPage() {
         <a className={styles.button} href="/admin/providers/smspool" style={{ textDecoration: "none" }}>Voltar ao SMSPool</a>
       </div>
       {error && <div className={styles.error}>{error}</div>}
-      {message && <div className={styles.success}>{message}</div>}
+      {message && <div className={styles.ok}>{message}</div>}
     </section>
 
     {rows.length > 0 && <section className={styles.card}>
