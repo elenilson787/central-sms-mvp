@@ -562,6 +562,30 @@
   color: #fbbf24;
 }
 
+/* UX clarification: in both quote and review tables, the fourth row is the route row. */
+.modal .quoteRows > div:nth-child(4) strong {
+  font-size: 0;
+}
+
+.modal .quoteRows > div:nth-child(4) strong::after {
+  content: "Melhor disponível";
+  font-size: 12px;
+}
+
+/* If a quality warning is immediately followed by a positive stock notice, keep stock visually neutral. */
+.warnNotice + .okNotice {
+  background: color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 10%, transparent);
+  color: var(--tg-theme-hint-color, #94a3b8);
+  border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color, #94a3b8) 22%, transparent);
+  font-size: 0;
+}
+
+.warnNotice + .okNotice::before {
+  content: "Números em estoque. Existem números disponíveis neste momento. Isso indica apenas disponibilidade e não altera a taxa de sucesso exibida acima. A disponibilidade será confirmada novamente ao comprar.";
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .helper {
   text-align: center;
   margin: 14px 8px 0;
