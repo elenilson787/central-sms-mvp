@@ -34,14 +34,36 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       return { ok: true, handled: true };
     }
 
+    const welcomeText = [
+      "👋 Bem-vindo à Central SMS!",
+      "",
+      "Aqui você pode comprar números temporários para receber códigos SMS de diversos aplicativos e sites.",
+      "",
+      "Como começar:",
+      "1. 💳 Recarregue sua carteira via PIX",
+      "2. 📲 Escolha o serviço e o país",
+      "3. 📊 Confira preço, disponibilidade e taxa de sucesso",
+      "4. ✅ Confirme a compra",
+      "5. 📩 Acompanhe o código em Minhas ativações",
+      "",
+      "⭐ As melhores rotas aparecem em Recomendados agora.",
+      "",
+      "🔄 Se uma ativação terminar sem SMS e o fornecedor confirmar o reembolso, o valor correspondente retorna automaticamente para sua carteira.",
+      "",
+      "🧪 Central SMS está em beta público.",
+      "🚫 Use apenas para finalidades legítimas e de acordo com nossos termos.",
+      "",
+      "Toque no botão abaixo para abrir a Central SMS.",
+    ].join("\n");
+
     await sendTelegramText(
       chatId,
-      "📲 CENTRAL SMS\n\nAcesse sua carteira, recargas PIX, ativações e catálogo pela Mini App. Compras reais de números permanecem bloqueadas até a validação comercial do provider.",
+      welcomeText,
       {
         reply_markup: {
           inline_keyboard: [[
             {
-              text: "🚀 Abrir Central SMS",
+              text: "📲 Abrir Central SMS",
               web_app: { url: miniAppUrl },
             },
           ]],
