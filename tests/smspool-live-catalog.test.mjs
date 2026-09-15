@@ -38,9 +38,10 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
   assert.match(panel, /if \(query\.length < 2\) return \[\]/);
   assert.match(panel, /Comece digitando o nome do app ou site/);
   assert.match(panel, /availableFeaturedServices/);
-  assert.match(panel, /Disponíveis agora:/);
-  assert.match(panel, /offer\.stock > 0/);
+  assert.match(panel, /Serviços populares:/);
+  assert.match(panel, /O estoque é confirmado em tempo real quando você abre a cotação/);
   assert.match(panel, /offer\.pricingConfigured/);
+  assert.doesNotMatch(panel, /offer\.stock > 0/);
   assert.doesNotMatch(panel, /const QUICK_SEARCHES/);
   assert.match(panel, /Não encontramos um serviço aprovado com esse nome neste país/);
 });
