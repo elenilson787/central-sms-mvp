@@ -37,7 +37,11 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
 
   assert.match(panel, /if \(query\.length < 2\) return \[\]/);
   assert.match(panel, /Comece digitando o nome do app ou site/);
-  assert.match(panel, /Ex\.: YouTube, Discord, Steam/);
+  assert.match(panel, /availableFeaturedServices/);
+  assert.match(panel, /Disponíveis agora:/);
+  assert.match(panel, /offer\.stock > 0/);
+  assert.match(panel, /offer\.pricingConfigured/);
+  assert.doesNotMatch(panel, /const QUICK_SEARCHES/);
   assert.match(panel, /Não encontramos um serviço aprovado com esse nome neste país/);
 });
 

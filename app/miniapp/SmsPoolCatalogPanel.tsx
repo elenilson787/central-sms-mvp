@@ -67,7 +67,46 @@ type Props = {
   onPurchaseCompleted?: () => void | Promise<void>;
 };
 
-const QUICK_SEARCHES = ["YouTube", "Discord", "Steam"];
+type FeaturedService = {
+  label: string;
+  aliases: string[];
+};
+
+const FEATURED_SERVICES: FeaturedService[] = [
+  { label: "Discord", aliases: ["discord"] },
+  { label: "Telegram", aliases: ["telegram"] },
+  { label: "Google", aliases: ["google", "gmail"] },
+  { label: "Microsoft", aliases: ["microsoft", "outlook", "hotmail"] },
+  { label: "Steam", aliases: ["steam"] },
+  { label: "TikTok", aliases: ["tiktok", "tik tok"] },
+  { label: "Instagram", aliases: ["instagram"] },
+  { label: "Facebook", aliases: ["facebook"] },
+  { label: "YouTube", aliases: ["youtube", "you tube"] },
+];
+
+function normalizeServiceName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function featuredMatchScore(offer: CatalogOffer, aliases: string[]) {
+  const label = normalizeServiceName(offer.label);
+  const description = normalizeServiceName(offer.description);
+  let best = 0;
+  for (const rawAlias of aliases) {
+    const alias = normalizeServiceName(rawAlias);
+    if (!alias) continue;
+    if (label === alias) best = Math.max(best, 100);
+    else if (label.startsWith(`${alias} `) || label.endsWith(` ${alias}`)) best = Math.max(best, 80);
+    else if (label.includes(alias)) best = Math.max(best, 60);
+    else if (description.includes(alias)) best = Math.max(best, 20);
+  }
+  return best;
+}
 
 function formatMoney(cents: number, currency = "BRL") {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency }).format(cents / 100);
@@ -132,6 +171,26 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
     if (query.length < 2) return [];
     return offers.filter((offer) => `${offer.label} ${offer.countryName}`.toLocaleLowerCase("pt-BR").includes(query));
   }, [offers, searchQuery]);
+
+  const availableFeaturedServices = useMemo(() => {
+    const availableOffers = offers.filter((offer) => (
+      offer.stock !== null
+      && offer.stock > 0
+      && offer.pricingConfigured
+      && offer.salePriceCents !== null
+    ));
+
+    return FEATURED_SERVICES.flatMap((featured) => {
+      const bestMatch = availableOffers
+        .map((offer) => ({ offer, score: featuredMatchScore(offer, featured.aliases) }))
+        .filter((candidate) => candidate.score > 0)
+        .sort((a, b) => b.score - a.score || (a.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER) - (b.offer.salePriceCents ?? Number.MAX_SAFE_INTEGER))[0]?.offer;
+
+      return bestMatch
+        ? [{ displayLabel: featured.label, searchValue: bestMatch.label }]
+        : [];
+    });
+  }, [offers]);
 
   function closeQuote() {
     setSelectedOffer(null);
@@ -301,13 +360,22 @@ export default function SmsPoolCatalogPanel({ onPurchaseCompleted }: Props) {
             className={styles.input}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Ex.: YouTube, Discord, Steam"
+            placeholder="Ex.: Discord, Telegram, Instagram"
             autoComplete="off"
           />
-          <div className={styles.quickSearches} aria-label="Buscas rápidas">
-            <span>Exemplos:</span>
-            {QUICK_SEARCHES.map((item) => <button key={item} className={styles.quickSearchButton} type="button" onClick={() => setSearch(item)}>{item}</button>)}
-          </div>
+          {!loading && availableFeaturedServices.length > 0 && <div className={styles.quickSearches} aria-label="Serviços populares disponíveis agora">
+            <span>Disponíveis agora:</span>
+            {availableFeaturedServices.map((item) => (
+              <button
+                key={item.displayLabel}
+                className={styles.quickSearchButton}
+                type="button"
+                onClick={() => setSearch(item.searchValue)}
+              >
+                {item.displayLabel}
+              </button>
+            ))}
+          </div>}
 
           <label className={styles.fieldLabel} htmlFor="number-country">País do número</label>
           <select id="number-country" className={styles.select} value={country} onChange={(event) => void changeCountry(event.target.value)}>
