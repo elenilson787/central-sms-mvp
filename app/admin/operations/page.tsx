@@ -21,6 +21,10 @@ type DashboardPayload = {
     smsReceived: number;
     activationRefunds: number;
     pendingActivations: number;
+    terminalSuccesses: number;
+    terminalFailures: number;
+    terminalTotal: number;
+    refundRate: number;
     realSuccessRate: number | null;
   };
   provider: { balance: number | null; currency: string; reserve: number; error: string | null };
@@ -39,7 +43,7 @@ type DashboardPayload = {
     circuitBreakerResetAt: string | null;
   };
   alerts: Array<{ level: "critical" | "warning" | "info"; code: string; message: string }>;
-  recentActivity: Array<{ id: string; kind: "activation" | "pix"; title: string; status: string; amountCents: number; createdAt: string }>;
+  recentActivity: Array<{ id: string; kind: "activation" | "pix"; title: string; detail?: string | null; status: string; amountCents: number; createdAt: string }>;
 };
 
 function brl(cents: number) {
@@ -127,8 +131,8 @@ export default function OperationsPage() {
         <div className={styles.card}><div className={styles.cardLabel}>Custo SMSPool</div><div className={styles.cardValue}>{usd(m.providerSpendUsd)}</div><div className={styles.cardMeta}>Estimado em BRL: {brl(m.estimatedProviderCostBrlCents)}</div></div>
         <div className={styles.card}><div className={styles.cardLabel}>Margem bruta</div><div className={styles.cardValue}>{percent(m.grossMarginPercent)}</div><div className={styles.cardMeta}>{brl(m.grossProfitCents)} de lucro bruto estimado</div></div>
         <div className={styles.card}><div className={styles.cardLabel}>SMS recebidos</div><div className={styles.cardValue}>{m.smsReceived}</div><div className={styles.cardMeta}>Ativações com código recebido/concluídas</div></div>
-        <div className={styles.card}><div className={styles.cardLabel}>Reembolsadas</div><div className={styles.cardValue}>{m.activationRefunds}</div><div className={styles.cardMeta}>Ativações devolvidas pelo provider</div></div>
-        <div className={styles.card}><div className={styles.cardLabel}>Taxa de sucesso real</div><div className={styles.cardValue}>{percent(m.realSuccessRate)}</div><div className={styles.cardMeta}>Pendentes agora: {m.pendingActivations}</div></div>
+        <div className={styles.card}><div className={styles.cardLabel}>Reembolsadas</div><div className={styles.cardValue}>{m.activationRefunds}</div><div className={styles.cardMeta}>{m.terminalTotal > 0 ? `${percent(m.refundRate)} · ${m.activationRefunds} de ${m.terminalTotal} ativações finalizadas` : "Sem ativações finalizadas na janela"}</div></div>
+        <div className={styles.card}><div className={styles.cardLabel}>Taxa de sucesso real</div><div className={styles.cardValue}>{percent(m.realSuccessRate)}</div><div className={styles.cardMeta}>{m.terminalTotal > 0 ? `${m.terminalSuccesses} de ${m.terminalTotal} ativações · ` : ""}Pendentes agora: {m.pendingActivations}</div></div>
       </div>
 
       <section className={styles.panel}>
@@ -165,7 +169,7 @@ export default function OperationsPage() {
       <section className={styles.panel}>
         <h2 className={styles.sectionTitle}>Atividade recente</h2>
         <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Tipo</th><th>Item</th><th>Status</th><th>Valor</th><th>Data</th></tr></thead><tbody>
-          {data.recentActivity.map((item) => <tr key={`${item.kind}:${item.id}`}><td><span className={styles.badge}>{item.kind === "pix" ? "PIX" : "SMS"}</span></td><td>{item.title}</td><td>{item.status}</td><td>{brl(item.amountCents)}</td><td>{dateTime(item.createdAt)}</td></tr>)}
+          {data.recentActivity.map((item) => <tr key={`${item.kind}:${item.id}`}><td><span className={styles.badge}>{item.kind === "pix" ? "PIX" : "SMS"}</span></td><td><div>{item.title}</div>{item.detail && <div className={styles.cardMeta}>{item.detail}</div>}</td><td>{item.status}</td><td>{brl(item.amountCents)}</td><td>{dateTime(item.createdAt)}</td></tr>)}
           {!data.recentActivity.length && <tr><td colSpan={5} className={styles.muted}>Nenhuma atividade nas últimas 24 horas.</td></tr>}
         </tbody></table></div>
       </section>
