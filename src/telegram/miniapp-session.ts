@@ -1,3 +1,4 @@
+import { logAudit } from "@/src/audit/log";
 import { getSupabaseAdmin } from "@/src/db/supabase-server";
 import { resolveSmsPoolServiceLabels } from "@/src/providers/smspool/service-labels";
 import type { TelegramMiniAppUser } from "@/src/telegram/miniapp-auth";
@@ -51,6 +52,30 @@ export async function getOrCreateMiniAppSession(telegramUser: TelegramMiniAppUse
 
   if (userError || !appUser) throw new Error(`MINIAPP_USER_UPSERT_FAILED:${userError?.message ?? "unknown"}`);
   if (appUser.status !== "active") throw new Error("MINIAPP_USER_BLOCKED");
+
+  try {
+    const { data: startEvent } = await supabase
+      .from("audit_logs")
+      .select("metadata")
+      .eq("actor_type", "telegram_user")
+      .eq("actor_id", String(telegramUser.id))
+      .eq("action", "bot_start")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const metadata = (startEvent?.metadata ?? {}) as Record<string, unknown>;
+    const source = typeof metadata.source === "string" && metadata.source ? metadata.source : "direct";
+    await logAudit({
+      actorType: "telegram_user",
+      actorId: telegramUser.id,
+      action: "miniapp_open",
+      entityType: "app_user",
+      entityId: appUser.id,
+      metadata: { source },
+    });
+  } catch (error) {
+    console.error("[miniapp] failed to record acquisition open", error);
+  }
 
   let { data: wallet, error: walletReadError } = await supabase
     .from("wallets")
