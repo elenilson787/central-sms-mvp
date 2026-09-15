@@ -38,8 +38,8 @@ test("Mini App catalog avoids overwhelming the user with the full provider list 
   assert.match(panel, /if \(query\.length < 2\) return \[\]/);
   assert.match(panel, /Comece digitando o nome do app ou site/);
   assert.match(panel, /availableFeaturedServices/);
-  assert.match(panel, /Serviços populares:/);
-  assert.match(panel, /O estoque é confirmado em tempo real quando você abre a cotação/);
+  assert.match(panel, /Recomendados agora:/);
+  assert.match(panel, /taxa de sucesso de 60% ou mais/);
   assert.match(panel, /offer\.pricingConfigured/);
   assert.doesNotMatch(panel, /offer\.stock > 0/);
   assert.doesNotMatch(panel, /const QUICK_SEARCHES/);
