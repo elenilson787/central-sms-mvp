@@ -1,3 +1,4 @@
+import { logAudit } from "@/src/audit/log";
 import { env } from "@/src/config/env";
 import { getMiniAppUrl, sendTelegramText } from "@/src/telegram/client";
 
@@ -16,15 +17,45 @@ function publicUrl(path: string) {
   return base ? `${base}${path}` : null;
 }
 
+function normalizeAcquisitionSource(value?: string) {
+  const cleaned = (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return cleaned || "direct";
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate) {
   const message = update.message;
   const chatId = message?.chat?.id;
   const text = message?.text?.trim();
   if (!chatId || !text) return { ok: true, handled: false };
 
-  const command = text.split(/\s+/)[0].toLowerCase().split("@")[0];
+  const parts = text.split(/\s+/);
+  const command = parts[0].toLowerCase().split("@")[0];
 
   if (command === "/start") {
+    const source = normalizeAcquisitionSource(parts[1]);
+    const actorId = message.from?.id ?? chatId;
+    try {
+      await logAudit({
+        actorType: "telegram_user",
+        actorId,
+        action: "bot_start",
+        entityType: "telegram_bot",
+        entityId: "CentralSMSBrasilBot",
+        metadata: {
+          source,
+          username: message.from?.username ?? null,
+          firstName: message.from?.first_name ?? null,
+        },
+      });
+    } catch (error) {
+      console.error("[telegram] failed to record acquisition source", error);
+    }
+
     const miniAppUrl = getMiniAppUrl();
     if (!miniAppUrl || !miniAppUrl.startsWith("https://")) {
       await sendTelegramText(
