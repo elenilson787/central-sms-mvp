@@ -99,7 +99,7 @@ export async function GET(request: Request) {
     const userById = new Map<string, any>();
     for (const user of users) userById.set(String(user.id), user);
 
-    const depositByUser = new Map<string, { cents: number; count: number }>();
+    const approvedPayments = payments\n      .filter((payment) => String(payment.status) === "approved")\n      .map((payment) => ({ ...payment, cents: Math.max(0, Math.trunc(Number(payment.amount_cents) || 0)) }))\n      .filter((payment) => payment.cents > 0)\n      .sort((a, b) => new Date(String(a.paid_at ?? a.created_at)).getTime() - new Date(String(b.paid_at ?? b.created_at)).getTime());\n\n    let cumulativeDepositedCents = 0;\n    const deposits = approvedPayments.map((payment) => {\n      cumulativeDepositedCents += payment.cents;\n      const user = userById.get(String(payment.user_id));\n      return {\n        id: String(payment.id),\n        userId: String(payment.user_id),\n        userName: user ? userLabel(user, String(payment.user_id)) : `Usuário ${String(payment.user_id).slice(0, 8)}`,\n        username: user?.username ?? null,\n        telegramUserId: user?.telegram_user_id != null ? String(user.telegram_user_id) : null,\n        amountCents: payment.cents,\n        cumulativeCents: cumulativeDepositedCents,\n        createdAt: String(payment.paid_at ?? payment.created_at),\n      };\n    }).reverse();\n\n    const depositByUser = new Map<string, { cents: number; count: number; lastAt: string | null }>();
     let depositedCents = 0;
     let depositingUsers = 0;
     for (const payment of payments) {
