@@ -108,7 +108,10 @@ export default function OperationsPage() {
         <h1 className={styles.title}>Central SMS — Operação do beta</h1>
         <p className={styles.muted}>Visão consolidada das últimas 24 horas para acompanhar caixa, vendas, custo, qualidade e travas de segurança.</p>
       </div>
-      <a className={styles.link} href="/admin">← Voltar à administração</a>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <a className={styles.link} href="/admin">← Voltar à administração</a>
+        <a className={styles.link} href="/admin/history">📋 Histórico completo</a>
+      </div>
     </div>
 
     <section className={styles.panel}>
