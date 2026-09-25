@@ -9,12 +9,12 @@ type Log = {
 };
 type UserRow = {
   userId: string; name: string; username: string | null; telegramUserId: string | null;
-  depositedCents: number; depositCount: number; spentCents: number; purchaseCount: number; balanceMovementCents: number;
+  depositedCents: number; depositCount: number; lastDepositAt: string | null; spentCents: number; purchaseCount: number; balanceMovementCents: number;
 };
 type Payload = {
-  ok: true; count: number; actions: string[]; logs: Log[]; users: UserRow[];
+  ok: true; count: number; actions: string[]; logs: Log[]; users: UserRow[]; deposits: DepositRow[];
   period: { from: string | null; to: string | null; label: string };
-  categories: {
+  deposits: DepositRow[];\n  categories: {
     financeiro: { deposits: number; depositors: number; refunds: number };
     compras: { purchases: number; spent: number; smsReceived: number };
     usuarios: { distinctUsers: number; usersWithFinancialActivity: number };
@@ -22,7 +22,7 @@ type Payload = {
   };
 };
 
-const money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+type DepositRow = { id: string; userId: string; userName: string; username: string | null; telegramUserId: string | null; amountCents: number; cumulativeCents: number; createdAt: string };\n\nconst money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 const integer = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
 const dateTime = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value));
 
@@ -129,14 +129,14 @@ export default function AdminHistoryPage() {
         <span className={styles.muted}>{integer(payload.users.length)} com atividade financeira</span>
       </div>
       <div className={styles.tableWrap}><table className={styles.table}><thead><tr>
-        <th>Usuário</th><th>Telegram</th><th>Colocou</th><th>Depósitos</th><th>Gastou</th><th>Compras</th><th>Diferença</th>
+        <th>Usuário</th><th>Telegram</th><th>Colocou</th><th>Depósitos</th><th>Última recarga</th><th>Gastou</th><th>Compras</th><th>Diferença</th>
       </tr></thead><tbody>
         {payload.users.map((user) => <tr key={user.userId}>
           <td><strong>{user.name}</strong>{user.username ? <div className={styles.cardMeta}>@{user.username}</div> : null}</td>
           <td>{user.telegramUserId ?? "—"}</td><td>{money(user.depositedCents)}</td><td>{integer(user.depositCount)}</td>
-          <td>{money(user.spentCents)}</td><td>{integer(user.purchaseCount)}</td><td>{money(user.balanceMovementCents)}</td>
+          <td>{user.lastDepositAt ? dateTime(user.lastDepositAt) : "—"}</td><td>{money(user.spentCents)}</td><td>{integer(user.purchaseCount)}</td><td>{money(user.balanceMovementCents)}</td>
         </tr>)}
-        {!payload.users.length && <tr><td colSpan={7} className={styles.muted}>Nenhum usuário com movimentação financeira neste período.</td></tr>}
+        {!payload.users.length && <tr><td colSpan={8} className={styles.muted}>Nenhum usuário com movimentação financeira neste período.</td></tr>}
       </tbody></table></div>
     </section>}
 
