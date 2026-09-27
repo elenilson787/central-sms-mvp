@@ -11,10 +11,11 @@ type UserRow = {
   userId: string; name: string; username: string | null; telegramUserId: string | null;
   depositedCents: number; depositCount: number; lastDepositAt: string | null; spentCents: number; purchaseCount: number; balanceMovementCents: number;
 };
+type DepositRow = { id: string; userId: string; userName: string; username: string | null; telegramUserId: string | null; amountCents: number; cumulativeCents: number; createdAt: string };
 type Payload = {
   ok: true; count: number; actions: string[]; logs: Log[]; users: UserRow[]; deposits: DepositRow[];
   period: { from: string | null; to: string | null; label: string };
-  deposits: DepositRow[];\n  categories: {
+  categories: {
     financeiro: { deposits: number; depositors: number; refunds: number };
     compras: { purchases: number; spent: number; smsReceived: number };
     usuarios: { distinctUsers: number; usersWithFinancialActivity: number };
@@ -22,7 +23,7 @@ type Payload = {
   };
 };
 
-type DepositRow = { id: string; userId: string; userName: string; username: string | null; telegramUserId: string | null; amountCents: number; cumulativeCents: number; createdAt: string };\n\nconst money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+const money = (cents: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 const integer = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
 const dateTime = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value));
 
@@ -44,7 +45,7 @@ export default function AdminHistoryPage() {
 
   useEffect(() => {
     const existing = window.sessionStorage.getItem("central_sms_admin_token");
-    if (existing) { setToken(existing); }
+    if (existing) setToken(existing);
   }, []);
 
   function rememberToken(value: string) {
