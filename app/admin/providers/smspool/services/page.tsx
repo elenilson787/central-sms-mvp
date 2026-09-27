@@ -112,7 +112,7 @@ export default function SmsPoolServicePoliciesPage() {
     <section className={styles.panel}>
       <div className={styles.row}>
         <input className={styles.input} type="password" value={token} onChange={(event) => rememberToken(event.target.value)} placeholder="ADMIN_API_TOKEN" autoComplete="off" />
-        <button className={styles.button} disabled={!token || busy} onClick={() => void load()}>{busy ? "Consultando…" : "Consultar Brasil"}</button>
+        <button className={styles.button} disabled={!token || busy} onClick={() => void load()}>{busy ? "Consultando…" : "Consultar Brasil"}</button>\n        <a className={styles.button} href="/admin/providers/smspool/catalog" style={{ textDecoration: "none" }}>Catálogo global de serviços</a>
         <a className={styles.button} href="/admin/providers/smspool" style={{ textDecoration: "none" }}>Voltar ao SMSPool</a>
       </div>
       {error && <div className={styles.error}>{error}</div>}
