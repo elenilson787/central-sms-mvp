@@ -66,7 +66,7 @@ function aggregate(pricing: SmsPoolPricing[], policies: Map<string, { product: s
 
     const countryId = String(row.country);
     const countryCode = String(row.short_name ?? "").toUpperCase();
-    const countryName = String(row.country_name ?? countryCode || countryId);
+    const countryName = String(row.country_name ?? countryCode ?? countryId);
     const key = product;
 
     let service = serviceMap.get(key);
